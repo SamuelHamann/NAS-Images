@@ -1,0 +1,61 @@
+# ─── Secrets & environment ───────────────────────────────────────────────
+# Never commit real secrets. Keep committed templates (.env.example) tracked.
+.env
+.env.*
+*.env
+!.env.example
+!*.env.example
+
+# Standalone secret material
+secrets/
+*.secret
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+credentials.json
+*credentials*
+
+# ─── Local container data / persistence ──────────────────────────────────
+# Bind-mounted app data should live outside Git or be ignored here.
+data/
+appdata/
+volumes/
+config/local/
+*.sqlite
+*.sqlite3
+*.db
+
+# ─── Logs & runtime ──────────────────────────────────────────────────────
+logs/
+*.log
+*.pid
+
+# ─── Backups & archives ──────────────────────────────────────────────────
+backup/
+backups/
+*.bak
+*.backup
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.dump
+
+# ─── macOS ───────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# ─── Editors / IDEs ──────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── Misc ────────────────────────────────────────────────────────────────
+*.tmp
+.cache/
