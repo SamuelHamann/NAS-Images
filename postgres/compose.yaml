@@ -66,6 +66,16 @@ services:
       - postgres_net
 
     # ---------------------------------------------------------------------
+    # Env file — loads ALL .env variables directly into the container so
+    # that per-app password vars (e.g. POSTGRES_WHATSFORDINNER_PASSWORD)
+    # are visible to the init scripts without enumerating them one by one
+    # here. The `environment:` block below takes precedence for the core
+    # vars where we want explicit validation (`:?` syntax).
+    # ---------------------------------------------------------------------
+    env_file:
+      - .env
+
+    # ---------------------------------------------------------------------
     # Configuration & secrets  (all values come from the git-ignored .env)
     # ---------------------------------------------------------------------
     environment:
