@@ -13,7 +13,7 @@ app — each with its own login role.
   `postgres_net` docker network)
 - **Volumes:** `postgres_data` (cluster files), `./initdb` (first-boot
   init scripts, read-only)
-- **Init scripts injected into the image** (one file per app, ordered):
+- **Init scripts mounted into the container** (one file per app, ordered):
   - `initdb/01-create-databases.sh` — creates one DB + owning role per
     entry in `POSTGRES_MULTIPLE_DATABASES`.
   - `initdb/02-init-whatsfordinner.sql` — schema for the
