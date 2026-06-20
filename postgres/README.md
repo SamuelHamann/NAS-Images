@@ -22,9 +22,9 @@ for *its own* database + role.
 
 ## Ports
 
-| Host binding         | Container | Purpose                                 |
-| -------------------- | --------- | --------------------------------------- |
-| `127.0.0.1:5432`     | `5432`    | Local admin access only (psql, tunnels) |
+| Host binding                     | Container | Purpose                                 |
+| ------------------------------- | --------- | --------------------------------------- |
+| `127.0.0.1:${POSTGRES_BIND_PORT:-5432}` | `5432`    | Local admin access only (psql, tunnels) |
 
 The port is bound to **loopback only**. Apps on the same NAS talk to
 postgres over the internal docker network — they do not need this port.
