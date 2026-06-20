@@ -135,6 +135,23 @@ CREATE INDEX IF NOT EXISTS recipe_tags_tag_idx ON recipe_tags (tag_id);
 
 
 -- ----------------------------------------------------------------------------
+-- Food locations  (where an ingredient is physically stored)
+-- ----------------------------------------------------------------------------
+-- A small reference table — fridge, freezer, pantry, spice rack, etc. —
+-- kept separate so location names are consistent and can be extended
+-- without touching pantry_ingredients. `name` is citext + UNIQUE so
+-- "Fridge" and "fridge" are treated as the same location.
+-- ON DELETE RESTRICT on the FK in pantry_ingredients prevents removing
+-- a location that still has stock assigned to it.
+CREATE TABLE IF NOT EXISTS food_locations (
+    id          bigserial   PRIMARY KEY,
+    name        citext      NOT NULL UNIQUE,   -- 'fridge', 'freezer', 'pantry', …
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+
+
+-- ----------------------------------------------------------------------------
 -- Pantry ingredients  (what we currently have in stock at home)
 -- ----------------------------------------------------------------------------
 -- One row per ingredient — UNIQUE(ingredient_id) — with the remaining
@@ -148,12 +165,14 @@ CREATE INDEX IF NOT EXISTS recipe_tags_tag_idx ON recipe_tags (tag_id);
 -- "we have some" — set it to 0 (or DELETE the row) when running out.
 -- ON DELETE CASCADE on ingredient_id so removing an ingredient from
 -- the master list also clears it from the pantry; RESTRICT on unit_id
--- so we never silently lose the meaning of a stocked quantity.
+-- and location_id so we never silently lose the meaning of a stocked
+-- quantity or its storage location.
 CREATE TABLE IF NOT EXISTS pantry_ingredients (
     id              uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
-    ingredient_id   bigint        NOT NULL UNIQUE REFERENCES ingredients(id) ON DELETE CASCADE,
+    ingredient_id   bigint        NOT NULL UNIQUE REFERENCES ingredients(id)  ON DELETE CASCADE,
     quantity        numeric(10,3) NOT NULL CHECK (quantity >= 0),
-    unit_id         bigint        NOT NULL REFERENCES units(id) ON DELETE RESTRICT,
+    unit_id         bigint        NOT NULL REFERENCES units(id)               ON DELETE RESTRICT,
+    location_id     bigint        REFERENCES food_locations(id)               ON DELETE RESTRICT,
     note            text,
     is_quantified   boolean       NOT NULL DEFAULT true,
     updated_at      timestamptz   NOT NULL DEFAULT now()
@@ -210,12 +229,14 @@ ALTER TABLE units                OWNER TO whatsfordinner;
 ALTER TABLE recipe_ingredients   OWNER TO whatsfordinner;
 ALTER TABLE tags                 OWNER TO whatsfordinner;
 ALTER TABLE recipe_tags          OWNER TO whatsfordinner;
+ALTER TABLE food_locations       OWNER TO whatsfordinner;
 ALTER TABLE pantry_ingredients   OWNER TO whatsfordinner;
 ALTER TABLE past_cooked_recipes  OWNER TO whatsfordinner;
 
 -- Sequences backing the bigserial PKs are separate objects and must be
 -- transferred too — otherwise INSERTs fail with "permission denied for
 -- sequence …_id_seq".
-ALTER SEQUENCE ingredients_id_seq OWNER TO whatsfordinner;
-ALTER SEQUENCE units_id_seq       OWNER TO whatsfordinner;
-ALTER SEQUENCE tags_id_seq        OWNER TO whatsfordinner;
+ALTER SEQUENCE ingredients_id_seq  OWNER TO whatsfordinner;
+ALTER SEQUENCE units_id_seq        OWNER TO whatsfordinner;
+ALTER SEQUENCE tags_id_seq         OWNER TO whatsfordinner;
+ALTER SEQUENCE food_locations_id_seq OWNER TO whatsfordinner;
