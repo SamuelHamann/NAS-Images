@@ -130,9 +130,7 @@ The entrypoint **does not** re-run `/docker-entrypoint-initdb.d/` once
   ```
 - or apply SQL directly:
   ```bash
-  docker compose exec -T postgres \
-    psql -U "$POSTGRES_USER" -d postgres < my-change.sql
-  ```
+docker compose exec -T postgres sh -lc 'psql -U "$POSTGRES_USER" -d postgres' < my-change.sql
 
 ## Security notes
 
