@@ -1,0 +1,3 @@
+# Keeps the bind-mount target (./config) tracked in git even though its
+# contents (HA configuration, database, secrets, custom_components…) are
+# ignored via the parent .gitignore. Do NOT remove.

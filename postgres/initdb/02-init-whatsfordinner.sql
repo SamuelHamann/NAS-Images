@@ -47,6 +47,24 @@ CREATE TABLE IF NOT EXISTS recipes (
     updated_at          timestamptz   NOT NULL DEFAULT now()
 );
 
+-- "Show me quick recipes" — index on the computed total time so the
+-- planner can satisfy ORDER BY / WHERE (prep + cook) <= N without
+-- reading every row. A functional index stores the expression result.
+CREATE INDEX IF NOT EXISTS recipes_total_time_idx
+    ON recipes ((prep_time_minutes + cook_time_minutes));
+
+-- Separate indexes on each time column (partial, NULLs excluded) so the
+-- planner can satisfy filters like "prep time under 15 min" or
+-- "cook time under 30 min" independently, and can also combine both via
+-- a bitmap-AND without needing the total-time expression index.
+CREATE INDEX IF NOT EXISTS recipes_prep_time_idx
+    ON recipes (prep_time_minutes)
+    WHERE prep_time_minutes IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS recipes_cook_time_idx
+    ON recipes (cook_time_minutes)
+    WHERE cook_time_minutes IS NOT NULL;
+
 
 -- ----------------------------------------------------------------------------
 -- Ingredients (canonical list, reused across recipes)
@@ -117,6 +135,23 @@ CREATE INDEX IF NOT EXISTS recipe_tags_tag_idx ON recipe_tags (tag_id);
 
 
 -- ----------------------------------------------------------------------------
+-- Food locations  (where an ingredient is physically stored)
+-- ----------------------------------------------------------------------------
+-- A small reference table — fridge, freezer, pantry, spice rack, etc. —
+-- kept separate so location names are consistent and can be extended
+-- without touching pantry_ingredients. `name` is citext + UNIQUE so
+-- "Fridge" and "fridge" are treated as the same location.
+-- ON DELETE RESTRICT on the FK in pantry_ingredients prevents removing
+-- a location that still has stock assigned to it.
+CREATE TABLE IF NOT EXISTS food_locations (
+    id          bigserial   PRIMARY KEY,
+    name        citext      NOT NULL UNIQUE,   -- 'fridge', 'freezer', 'pantry', …
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+
+
+-- ----------------------------------------------------------------------------
 -- Pantry ingredients  (what we currently have in stock at home)
 -- ----------------------------------------------------------------------------
 -- One row per ingredient — UNIQUE(ingredient_id) — with the remaining
@@ -130,16 +165,57 @@ CREATE INDEX IF NOT EXISTS recipe_tags_tag_idx ON recipe_tags (tag_id);
 -- "we have some" — set it to 0 (or DELETE the row) when running out.
 -- ON DELETE CASCADE on ingredient_id so removing an ingredient from
 -- the master list also clears it from the pantry; RESTRICT on unit_id
--- so we never silently lose the meaning of a stocked quantity.
+-- and location_id so we never silently lose the meaning of a stocked
+-- quantity or its storage location.
 CREATE TABLE IF NOT EXISTS pantry_ingredients (
     id              uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
-    ingredient_id   bigint        NOT NULL UNIQUE REFERENCES ingredients(id) ON DELETE CASCADE,
+    ingredient_id   bigint        NOT NULL UNIQUE REFERENCES ingredients(id)  ON DELETE CASCADE,
     quantity        numeric(10,3) NOT NULL CHECK (quantity >= 0),
-    unit_id         bigint        NOT NULL REFERENCES units(id) ON DELETE RESTRICT,
+    unit_id         bigint        NOT NULL REFERENCES units(id)               ON DELETE RESTRICT,
+    location_id     bigint        REFERENCES food_locations(id)               ON DELETE RESTRICT,
     note            text,
     is_quantified   boolean       NOT NULL DEFAULT true,
     updated_at      timestamptz   NOT NULL DEFAULT now()
 );
+
+-- "What do we currently have in stock?" — skips zero-quantity rows so
+-- the planner only scans rows where something is actually available.
+CREATE INDEX IF NOT EXISTS pantry_stocked_idx
+    ON pantry_ingredients (ingredient_id)
+    WHERE quantity > 0;
+
+
+-- ----------------------------------------------------------------------------
+-- Past cooked recipes  (rolling "how often / when last cooked" counter)
+-- ----------------------------------------------------------------------------
+-- One row per recipe — UNIQUE(recipe_id) — modelled as a rolling counter
+-- rather than an event log because the questions we actually ask are
+-- "how many times have I cooked this?" and "when did I last make it?".
+-- A row only exists once a recipe has been cooked at least once, so
+-- `times_cooked` is NOT NULL with CHECK (>= 1).
+--
+-- Typical write path from the app:
+--   INSERT INTO past_cooked_recipes (recipe_id, last_cooked_at)
+--   VALUES ($1, now())
+--   ON CONFLICT (recipe_id) DO UPDATE
+--     SET times_cooked   = past_cooked_recipes.times_cooked + 1,
+--         last_cooked_at = EXCLUDED.last_cooked_at;
+--
+-- If we ever want per-cook history (notes, who cooked, rating per cook),
+-- add a sibling `cooked_recipe_events` table; this aggregate stays.
+--
+-- ON DELETE CASCADE on recipe_id: cook stats are meaningless without
+-- the recipe they refer to.
+CREATE TABLE IF NOT EXISTS past_cooked_recipes (
+    id              uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
+    recipe_id       uuid         NOT NULL UNIQUE REFERENCES recipes(id) ON DELETE CASCADE,
+    times_cooked    int          NOT NULL DEFAULT 1 CHECK (times_cooked >= 1),
+    last_cooked_at  timestamptz  NOT NULL DEFAULT now()
+);
+
+-- Fast "what have I cooked recently?" lookups (most recent first).
+CREATE INDEX IF NOT EXISTS past_cooked_recipes_last_cooked_idx
+    ON past_cooked_recipes (last_cooked_at DESC);
 
 
 -- ----------------------------------------------------------------------------
@@ -153,11 +229,14 @@ ALTER TABLE units                OWNER TO whatsfordinner;
 ALTER TABLE recipe_ingredients   OWNER TO whatsfordinner;
 ALTER TABLE tags                 OWNER TO whatsfordinner;
 ALTER TABLE recipe_tags          OWNER TO whatsfordinner;
+ALTER TABLE food_locations       OWNER TO whatsfordinner;
 ALTER TABLE pantry_ingredients   OWNER TO whatsfordinner;
+ALTER TABLE past_cooked_recipes  OWNER TO whatsfordinner;
 
 -- Sequences backing the bigserial PKs are separate objects and must be
 -- transferred too — otherwise INSERTs fail with "permission denied for
 -- sequence …_id_seq".
-ALTER SEQUENCE ingredients_id_seq OWNER TO whatsfordinner;
-ALTER SEQUENCE units_id_seq       OWNER TO whatsfordinner;
-ALTER SEQUENCE tags_id_seq        OWNER TO whatsfordinner;
+ALTER SEQUENCE ingredients_id_seq  OWNER TO whatsfordinner;
+ALTER SEQUENCE units_id_seq        OWNER TO whatsfordinner;
+ALTER SEQUENCE tags_id_seq         OWNER TO whatsfordinner;
+ALTER SEQUENCE food_locations_id_seq OWNER TO whatsfordinner;
