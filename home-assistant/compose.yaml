@@ -19,7 +19,7 @@ services:
       TZ: ${TZ:-Etc/UTC}
 
     volumes:
-      - ./homeassistant:/config
+      - home-assistant:/config
       - /etc/localtime:/etc/localtime:ro
 
     mem_limit: 2g
