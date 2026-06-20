@@ -96,8 +96,8 @@ docker compose logs -f      # watch the init scripts on first boot
 Verify:
 
 ```bash
-docker compose exec postgres pg_isready -U "$POSTGRES_USER"
-docker compose exec postgres psql -U "$POSTGRES_USER" -c '\l'
+docker compose exec postgres sh -lc 'pg_isready -U "$POSTGRES_USER"'
+docker compose exec postgres sh -lc 'psql -U "$POSTGRES_USER" -c "\\l"'
 ```
 
 ### Letting another stack use this server
