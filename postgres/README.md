@@ -71,7 +71,7 @@ single service.
 | File                                       | Type | What it does                                                                                  |
 | ------------------------------------------ | ---- | --------------------------------------------------------------------------------------------- |
 | `initdb/01-create-databases.sh`            | sh   | Reads `POSTGRES_MULTIPLE_DATABASES`; for each entry creates a login role and a DB it owns.    |
-| `initdb/02-init-whatsfordinner.sql`        | sql  | Schema for the **WhatsForDinner** app (recipes, ingredients, units, tags, pantry stock).      |
+| `initdb/02-init-whatsfordinner.sql`        | sql  | Schema for the **WhatsForDinner** app (recipes, ingredients, units, tags, pantry stock, cook history). |
 
 To add a new database:
 

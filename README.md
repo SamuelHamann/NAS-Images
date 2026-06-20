@@ -18,7 +18,7 @@ app — each with its own login role.
     entry in `POSTGRES_MULTIPLE_DATABASES`.
   - `initdb/02-init-whatsfordinner.sql` — schema for the
     **WhatsForDinner** app (recipes, ingredients, units, tags, pantry
-    stock).
+    stock, cook history).
   - *(add `initdb/NN-init-<name>.sql` per new app — see
     [`postgres/README.md`](./postgres/README.md))*
 - **Env vars:** see [`postgres/.env.example`](./postgres/.env.example).

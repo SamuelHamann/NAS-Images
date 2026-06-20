@@ -47,6 +47,24 @@ CREATE TABLE IF NOT EXISTS recipes (
     updated_at          timestamptz   NOT NULL DEFAULT now()
 );
 
+-- "Show me quick recipes" — index on the computed total time so the
+-- planner can satisfy ORDER BY / WHERE (prep + cook) <= N without
+-- reading every row. A functional index stores the expression result.
+CREATE INDEX IF NOT EXISTS recipes_total_time_idx
+    ON recipes ((prep_time_minutes + cook_time_minutes));
+
+-- Separate indexes on each time column (partial, NULLs excluded) so the
+-- planner can satisfy filters like "prep time under 15 min" or
+-- "cook time under 30 min" independently, and can also combine both via
+-- a bitmap-AND without needing the total-time expression index.
+CREATE INDEX IF NOT EXISTS recipes_prep_time_idx
+    ON recipes (prep_time_minutes)
+    WHERE prep_time_minutes IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS recipes_cook_time_idx
+    ON recipes (cook_time_minutes)
+    WHERE cook_time_minutes IS NOT NULL;
+
 
 -- ----------------------------------------------------------------------------
 -- Ingredients (canonical list, reused across recipes)
@@ -141,6 +159,45 @@ CREATE TABLE IF NOT EXISTS pantry_ingredients (
     updated_at      timestamptz   NOT NULL DEFAULT now()
 );
 
+-- "What do we currently have in stock?" — skips zero-quantity rows so
+-- the planner only scans rows where something is actually available.
+CREATE INDEX IF NOT EXISTS pantry_stocked_idx
+    ON pantry_ingredients (ingredient_id)
+    WHERE quantity > 0;
+
+
+-- ----------------------------------------------------------------------------
+-- Past cooked recipes  (rolling "how often / when last cooked" counter)
+-- ----------------------------------------------------------------------------
+-- One row per recipe — UNIQUE(recipe_id) — modelled as a rolling counter
+-- rather than an event log because the questions we actually ask are
+-- "how many times have I cooked this?" and "when did I last make it?".
+-- A row only exists once a recipe has been cooked at least once, so
+-- `times_cooked` is NOT NULL with CHECK (>= 1).
+--
+-- Typical write path from the app:
+--   INSERT INTO past_cooked_recipes (recipe_id, last_cooked_at)
+--   VALUES ($1, now())
+--   ON CONFLICT (recipe_id) DO UPDATE
+--     SET times_cooked   = past_cooked_recipes.times_cooked + 1,
+--         last_cooked_at = EXCLUDED.last_cooked_at;
+--
+-- If we ever want per-cook history (notes, who cooked, rating per cook),
+-- add a sibling `cooked_recipe_events` table; this aggregate stays.
+--
+-- ON DELETE CASCADE on recipe_id: cook stats are meaningless without
+-- the recipe they refer to.
+CREATE TABLE IF NOT EXISTS past_cooked_recipes (
+    id              uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
+    recipe_id       uuid         NOT NULL UNIQUE REFERENCES recipes(id) ON DELETE CASCADE,
+    times_cooked    int          NOT NULL DEFAULT 1 CHECK (times_cooked >= 1),
+    last_cooked_at  timestamptz  NOT NULL DEFAULT now()
+);
+
+-- Fast "what have I cooked recently?" lookups (most recent first).
+CREATE INDEX IF NOT EXISTS past_cooked_recipes_last_cooked_idx
+    ON past_cooked_recipes (last_cooked_at DESC);
+
 
 -- ----------------------------------------------------------------------------
 -- Hand ownership over to the app role
@@ -154,6 +211,7 @@ ALTER TABLE recipe_ingredients   OWNER TO whatsfordinner;
 ALTER TABLE tags                 OWNER TO whatsfordinner;
 ALTER TABLE recipe_tags          OWNER TO whatsfordinner;
 ALTER TABLE pantry_ingredients   OWNER TO whatsfordinner;
+ALTER TABLE past_cooked_recipes  OWNER TO whatsfordinner;
 
 -- Sequences backing the bigserial PKs are separate objects and must be
 -- transferred too — otherwise INSERTs fail with "permission denied for
