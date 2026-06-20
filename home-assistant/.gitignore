@@ -1,0 +1,7 @@
+# Never commit real secrets for this stack.
+.env
+
+# Home Assistant writes its entire state into ./config (DB, secrets,
+# tokens, custom_components, .storage/…). None of it belongs in git.
+config/*
+!config/.gitkeep

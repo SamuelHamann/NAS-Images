@@ -1,134 +1,49 @@
-# PostgreSQL — lightweight shared database server for the NAS
-#
-# A single PostgreSQL instance hosts multiple logical databases (one per
-# app). Each app gets its own database AND its own login role so that
-# applications are isolated at the SQL level even though they share the
-# same server process.
-#
-# Scripts under ./initdb/ are executed in alphabetical order by the
-# official postgres entrypoint the *very first time* the data volume is
-# empty. They are responsible for creating the per-app databases / roles
-# / tables. Re-running them on an existing cluster has no effect (the
-# entrypoint skips /docker-entrypoint-initdb.d/ if PGDATA already exists).
-
 name: postgres
 
 services:
   postgres:
-    # Pinned to a specific minor + alpine variant so the image stays
-    # small (~85 MB) and rebuilds are reproducible / auditable.
-    # Bump deliberately when a new patch release is reviewed.
     image: postgres:16.4-alpine3.20
-
     container_name: postgres
-
-    # Survive reboots and crashes, but never auto-start if we stopped
-    # it manually (e.g. for maintenance / backups).
     restart: unless-stopped
 
-    # ---------------------------------------------------------------------
-    # Hardening
-    # ---------------------------------------------------------------------
     security_opt:
-      # Block privilege escalation via setuid/setgid binaries inside the
-      # container. Postgres never needs this.
       - no-new-privileges:true
 
     cap_drop:
-      # Start from zero Linux capabilities...
       - ALL
     cap_add:
-      # ...and add back only what the postgres entrypoint needs to
-      # initialise the data directory and drop privileges to the
-      # unprivileged `postgres` user.
       - CHOWN
       - DAC_READ_SEARCH
       - FOWNER
       - SETGID
       - SETUID
 
-    # NOTE: we deliberately do NOT set `user:` here. The official image's
-    # entrypoint starts as root, chowns PGDATA on first boot, and then
-    # drops to the `postgres` user (UID 70 on alpine) via `su-exec`. The
-    # actual `postgres` server process therefore runs unprivileged.
-
-    # ---------------------------------------------------------------------
-    # Networking
-    # ---------------------------------------------------------------------
-    # Publish on the host's loopback interface only. Apps running on the
-    # same NAS reach postgres over the internal docker network via the
-    # service DNS name `postgres:5432` and do NOT need this port at all;
-    # it exists for local admin tools (psql, pgAdmin via SSH tunnel...).
     ports:
       - "127.0.0.1:${POSTGRES_BIND_PORT:-5432}:5432"
 
     networks:
       - postgres_net
 
-    # ---------------------------------------------------------------------
-    # Env file — loads ALL .env variables directly into the container so
-    # that per-app password vars (e.g. POSTGRES_WHATSFORDINNER_PASSWORD)
-    # are visible to the init scripts without enumerating them one by one
-    # here. The `environment:` block below takes precedence for the core
-    # vars where we want explicit validation (`:?` syntax).
-    # ---------------------------------------------------------------------
     env_file:
       - .env
 
-    # ---------------------------------------------------------------------
-    # Configuration & secrets  (all values come from the git-ignored .env)
-    # ---------------------------------------------------------------------
     environment:
-      # Superuser used by admin tools and by the init scripts. The `:?`
-      # syntax makes compose refuse to start if the variable is missing,
-      # which prevents accidentally booting with a default password.
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-
-      # Default maintenance database created at first boot. Per-app
-      # databases are created by initdb/01-create-databases.sh.
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
-
-      # Comma-separated list consumed by 01-create-databases.sh.
-      # Each entry becomes:  database <name>  +  login role <name>.
       POSTGRES_MULTIPLE_DATABASES: ${POSTGRES_MULTIPLE_DATABASES:-}
-
-      # Force SCRAM-SHA-256 for every new role (modern, salted, no
-      # MD5 fallback). Applied during `initdb`, so only effective on
-      # the very first boot when the cluster is created.
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
-
-      # Keep data + WAL in a stable subpath of the named volume so we
-      # can mount sibling directories (e.g. for backups) without
-      # clashing with PGDATA.
       PGDATA: /var/lib/postgresql/data/pgdata
 
-    # ---------------------------------------------------------------------
-    # Persistence
-    # ---------------------------------------------------------------------
     volumes:
-      # Named volume holding the cluster files. Survives
-      # `docker compose down` (only `down -v` deletes it).
       - postgres_data:/var/lib/postgresql/data
-
-      # Init scripts mounted READ-ONLY — they are only executed on
-      # first boot, when PGDATA is empty.
       - ./initdb:/docker-entrypoint-initdb.d:ro
 
-    # The container's root filesystem is left writable (postgres needs
-    # to update a few files outside of PGDATA), but we provide tmpfs
-    # mounts for the volatile dirs so they never hit disk.
     tmpfs:
       - /tmp
       - /run/postgresql
 
-    # ---------------------------------------------------------------------
-    # Health & resource limits
-    # ---------------------------------------------------------------------
     healthcheck:
-      # `pg_isready` exits 0 only once the server is accepting
-      # connections. Other stacks depending on postgres should use
-      # `depends_on: { postgres: { condition: service_healthy } }`.
       test:
         - CMD-SHELL
         - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -h 127.0.0.1
@@ -137,12 +52,9 @@ services:
       retries: 5
       start_period: 30s
 
-    # Conservative caps so a runaway query can't starve the rest of
-    # the NAS. Tune upward if a workload genuinely needs more.
     mem_limit: 1g
     cpus: 1.5
 
-    # Cap log growth so a chatty client can't fill the NAS disk.
     logging:
       driver: json-file
       options:
@@ -151,16 +63,9 @@ services:
 
 volumes:
   postgres_data:
-    # Explicit name lets other compose projects mount this volume as
-    # `external: true` (e.g. a backup sidecar).
     name: postgres_data
 
 networks:
   postgres_net:
-    # Shared bridge network. Other NAS stacks can join it with:
-    #   networks:
-    #     postgres_net:
-    #       external: true
-    # so they reach postgres at `postgres:5432` without any host port.
     name: postgres_net
     driver: bridge
