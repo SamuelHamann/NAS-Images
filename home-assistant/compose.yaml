@@ -4,9 +4,10 @@ services:
     container_name: home-assistant
     restart: unless-stopped
     privileged: false
-    network_mode: host
     environment:
       TZ: ${TZ:-Etc/UTC}
+    networks:
+      - whatsfordinner_net
     volumes:
       - "/volume1/docker/home-assistant:/config"
       - /etc/localtime:/etc/localtime:ro
@@ -17,3 +18,7 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+
+networks:
+  whatsfordinner_net:
+    external: true   # created by the whatsfordinner stack, not this one

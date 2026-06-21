@@ -11,3 +11,5 @@ sudo chmod 700 /volume1/docker/postgres/data
 # 4. Start fresh
 docker compose -f /volume1/docker/postgres/compose.yaml up -d
 docker compose -f /volume1/docker/postgres/compose.yaml logs -f
+
+
