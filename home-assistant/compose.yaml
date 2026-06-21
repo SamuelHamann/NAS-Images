@@ -1,40 +1,19 @@
-name: home-assistant
-
 services:
   home-assistant:
     image: ghcr.io/home-assistant/home-assistant:stable
     container_name: home-assistant
     restart: unless-stopped
-
-    security_opt:
-      - no-new-privileges:true
-
-    ports:
-      - "${HA_BIND_ADDR:-0.0.0.0}:${HA_BIND_PORT:-8123}:8123"
-
-    networks:
-      - home_assistant_net
-
+    privileged: false
+    network_mode: host
     environment:
       TZ: ${TZ:-Etc/UTC}
-
     volumes:
-      - ./homeassistant:/config
+      - "/volume1/docker/home-assistant:/config"
       - /etc/localtime:/etc/localtime:ro
-
     mem_limit: 2g
     cpus: 2.0
-
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "5"
-
-networks:
-  home_assistant_net:
-    name: home_assistant_net
-    driver: bridge
-
-volumes:
-  home-assistant:

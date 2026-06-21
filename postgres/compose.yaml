@@ -9,14 +9,7 @@ services:
     security_opt:
       - no-new-privileges:true
 
-    cap_drop:
-      - ALL
-    cap_add:
-      - CHOWN
-      - DAC_READ_SEARCH
-      - FOWNER
-      - SETGID
-      - SETUID
+    user: "1000:1000"
 
     ports:
       - "127.0.0.1:${POSTGRES_BIND_PORT:-5432}:5432"
@@ -25,7 +18,7 @@ services:
       - postgres_net
 
     env_file:
-      - .env
+      - /volume1/docker/postgres/.env
 
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
@@ -36,8 +29,8 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
 
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./initdb:/docker-entrypoint-initdb.d:ro
+      - /volume1/docker/postgres/data:/var/lib/postgresql/data:rw
+      - /volume1/docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
 
     tmpfs:
       - /tmp
@@ -60,10 +53,6 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
-
-volumes:
-  postgres_data:
-    name: postgres_data
 
 networks:
   postgres_net:
