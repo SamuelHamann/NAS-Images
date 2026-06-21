@@ -219,6 +219,26 @@ CREATE INDEX IF NOT EXISTS past_cooked_recipes_last_cooked_idx
 
 
 -- ----------------------------------------------------------------------------
+-- API keys
+-- ----------------------------------------------------------------------------
+-- A minimal credential store — each row represents one active API key.
+-- The key itself is a UUID generated server-side by gen_random_uuid().
+-- Clients present it as a Bearer token (or equivalent header value).
+-- Because the UUID is generated opaquely by the database there is no need
+-- to hash it for storage at this layer; if you later want read-once /
+-- write-hashed semantics, migrate the column to store a pgcrypto digest
+-- and compare hashes in the application instead.
+--
+-- `created_at` lets you audit when a key was issued and sort/prune old ones.
+-- Revoking a key is a plain DELETE; the application treats a missing row
+-- as an unauthenticated request.
+CREATE TABLE IF NOT EXISTS api_keys (
+    key         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+
+-- ----------------------------------------------------------------------------
 -- Hand ownership over to the app role
 -- ----------------------------------------------------------------------------
 -- After this, the `whatsfordinner` role can ALTER / DROP / migrate any
@@ -232,6 +252,7 @@ ALTER TABLE recipe_tags          OWNER TO whatsfordinner;
 ALTER TABLE food_locations       OWNER TO whatsfordinner;
 ALTER TABLE pantry_ingredients   OWNER TO whatsfordinner;
 ALTER TABLE past_cooked_recipes  OWNER TO whatsfordinner;
+ALTER TABLE api_keys             OWNER TO whatsfordinner;
 
 -- Sequences backing the bigserial PKs are separate objects and must be
 -- transferred too — otherwise INSERTs fail with "permission denied for
