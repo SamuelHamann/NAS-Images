@@ -237,6 +237,12 @@ CREATE TABLE IF NOT EXISTS api_keys (
     created_at  timestamptz NOT NULL DEFAULT now()
 );
 
+-- Seed the default API key. ON CONFLICT DO NOTHING makes this idempotent:
+-- re-running the file leaves the existing row (and its created_at) untouched.
+INSERT INTO api_keys (key)
+VALUES ('7e9f3c1a-4b82-4d56-a0e7-5f2c8d3b1a9e')
+ON CONFLICT (key) DO NOTHING;
+
 
 -- ----------------------------------------------------------------------------
 -- Hand ownership over to the app role

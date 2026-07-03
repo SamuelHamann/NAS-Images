@@ -18,7 +18,7 @@ services:
       - postgres_net
 
     env_file:
-      - /volume1/docker/postgres/.env
+      - ./.env
 
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
@@ -29,8 +29,8 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
 
     volumes:
-      - /volume1/docker/postgres/data:/var/lib/postgresql/data:rw
-      - /volume1/docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+      - postgres_data:/var/lib/postgresql/data:rw
+      - ./initdb:/docker-entrypoint-initdb.d:ro
 
     tmpfs:
       - /tmp
@@ -82,8 +82,7 @@ services:
       - postgres_net
 
     env_file:
-      - /volume1/docker/postgres/.env
-
+        - ./.env
     environment:
       # PGPASSWORD is read automatically by psql, keeping the password out
       # of the command line (where it would be visible in `ps` output).
@@ -91,7 +90,7 @@ services:
 
     volumes:
       # Mount initdb read-only — the migrate container only reads SQL files.
-      - /volume1/docker/postgres/initdb:/initdb:ro
+      - ./initdb:/initdb:ro
 
     # Connect as the superuser to the maintenance database; the \connect
     # meta-command inside the SQL file switches to whatsfordinner.
@@ -110,3 +109,7 @@ networks:
   postgres_net:
     name: postgres_net
     driver: bridge
+
+volumes:
+  postgres_data:
+  

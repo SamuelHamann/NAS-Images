@@ -73,6 +73,23 @@ single service.
 | `initdb/01-create-databases.sh`            | sh   | Reads `POSTGRES_MULTIPLE_DATABASES`; for each entry creates a login role and a DB it owns.    |
 | `initdb/02-init-whatsfordinner.sql`        | sql  | Schema for the **WhatsForDinner** app (recipes, ingredients, units, tags, pantry stock, cook history, API keys). |
 
+## migrate service
+
+A dedicated `migrate` service in `compose.yaml` runs the schema SQL
+file on **every** `docker compose up`, then exits. Because all
+`CREATE TABLE` / `CREATE INDEX` / `CREATE EXTENSION` statements use
+`IF NOT EXISTS`, replaying the file against an already-initialised
+database is safe — existing objects are skipped and new ones are
+created automatically.
+
+```bash
+# Apply migrations as part of a normal stack start:
+docker compose up -d
+
+# Or trigger migrations alone without restarting postgres:
+docker compose run --rm migrate
+```
+
 To add a new database:
 
 1. Append its name to `POSTGRES_MULTIPLE_DATABASES` in `.env`.
@@ -80,9 +97,8 @@ To add a new database:
 3. Create a new `initdb/NN-init-<name>.sql` (next free `NN`, e.g. `03-`)
    that `\connect`s to the app database, creates its tables, and
    `ALTER … OWNER TO <name>;` every table **and sequence**.
-4. Either start from a clean volume (first deploy) **or** apply the new
-   file manually against the running server (see *Re-running init*
-   below).
+4. Add the new SQL file to the `migrate` service's `command` (or add a
+   second `migrate` service) so it is applied on the next `docker compose up`.
 
 ## How to deploy
 
