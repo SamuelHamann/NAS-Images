@@ -35,7 +35,7 @@ CREATE EXTENSION IF NOT EXISTS citext;
 -- Recipes
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS recipes (
-    id                  uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  bigserial          PRIMARY KEY,
     name                text          NOT NULL,
     description         text,
     instructions        text,
@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS units (
 -- `unit_id` is nullable so recipes can legitimately have unit-less
 -- entries (e.g. "a dash of salt").
 CREATE TABLE IF NOT EXISTS recipe_ingredients (
-    recipe_id       uuid          NOT NULL REFERENCES recipes(id)     ON DELETE CASCADE,
+    recipe_id       bigint          NOT NULL REFERENCES recipes(id)     ON DELETE CASCADE,
     ingredient_id   bigint        NOT NULL REFERENCES ingredients(id) ON DELETE RESTRICT,
     quantity        numeric(10,3) CHECK (quantity IS NULL OR quantity >= 0),
     unit_id         bigint        REFERENCES units(id)                ON DELETE RESTRICT,
@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS tags (
 );
 
 CREATE TABLE IF NOT EXISTS recipe_tags (
-    recipe_id   uuid    NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+    recipe_id   bigint    NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
     tag_id      bigint  NOT NULL REFERENCES tags(id)    ON DELETE CASCADE,
     PRIMARY KEY (recipe_id, tag_id)
 );
@@ -170,11 +170,13 @@ CREATE TABLE IF NOT EXISTS food_locations (
 CREATE TABLE IF NOT EXISTS pantry_ingredients (
     id              uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
     ingredient_id   bigint        NOT NULL UNIQUE REFERENCES ingredients(id)  ON DELETE CASCADE,
+    pantry_id       bigint        NOT NULL REFERENCES pantry(id) ON DELETE CASCADE,
     quantity        numeric(10,3) NOT NULL CHECK (quantity >= 0),
     unit_id         bigint        NOT NULL REFERENCES units(id)               ON DELETE RESTRICT,
     location_id     bigint        REFERENCES food_locations(id)               ON DELETE RESTRICT,
     note            text,
     is_quantified   boolean       NOT NULL DEFAULT true,
+    expiration_date date,         
     updated_at      timestamptz   NOT NULL DEFAULT now()
 );
 
@@ -219,6 +221,56 @@ CREATE INDEX IF NOT EXISTS past_cooked_recipes_last_cooked_idx
 
 
 -- ----------------------------------------------------------------------------
+-- API keys
+-- ----------------------------------------------------------------------------
+-- A minimal credential store — each row represents one active API key.
+-- The key itself is a UUID generated server-side by gen_random_uuid().
+-- Clients present it as a Bearer token (or equivalent header value).
+-- Because the UUID is generated opaquely by the database there is no need
+-- to hash it for storage at this layer; if you later want read-once /
+-- write-hashed semantics, migrate the column to store a pgcrypto digest
+-- and compare hashes in the application instead.
+--
+-- `created_at` lets you audit when a key was issued and sort/prune old ones.
+-- Revoking a key is a plain DELETE; the application treats a missing row
+-- as an unauthenticated request.
+CREATE TABLE IF NOT EXISTS api_keys (
+    key         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+-- Seed the default API key. ON CONFLICT DO NOTHING makes this idempotent:
+-- re-running the file leaves the existing row (and its created_at) untouched.
+INSERT INTO api_keys (key)
+VALUES ('7e9f3c1a-4b82-4d56-a0e7-5f2c8d3b1a9e')
+ON CONFLICT (key) DO NOTHING;
+
+-- User table
+
+CREATE TABLE IF NOT EXISTS users (
+    id         bigserial        PRIMARY KEY,
+    username   text      NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+
+CREATE TABLE IF NOT EXISTS pantry (
+    id bigserial PRIMARY KEY,
+    name text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- User pantry
+
+CREATE TABLE IF NOT EXISTS user_pantry (
+    id              bigserial          PRIMARY KEY,
+    id_pantry   bigint      NOT NULL REFERENCES pantry(id) ON DELETE CASCADE,
+    id_user bigint NOT NULL REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- ----------------------------------------------------------------------------
 -- Hand ownership over to the app role
 -- ----------------------------------------------------------------------------
 -- After this, the `whatsfordinner` role can ALTER / DROP / migrate any
@@ -232,6 +284,7 @@ ALTER TABLE recipe_tags          OWNER TO whatsfordinner;
 ALTER TABLE food_locations       OWNER TO whatsfordinner;
 ALTER TABLE pantry_ingredients   OWNER TO whatsfordinner;
 ALTER TABLE past_cooked_recipes  OWNER TO whatsfordinner;
+ALTER TABLE api_keys             OWNER TO whatsfordinner;
 
 -- Sequences backing the bigserial PKs are separate objects and must be
 -- transferred too — otherwise INSERTs fail with "permission denied for
