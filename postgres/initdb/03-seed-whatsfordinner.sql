@@ -383,6 +383,10 @@ ON CONFLICT (recipe_id, ingredient_id) DO NOTHING;
 
 -- ----------------------------------------------------------------------------
 -- recipe_tags
+-- recipe_tags.id (bigserial) is omitted from the column list below and
+-- is auto-assigned by its DEFAULT — only recipe_id/tag_id are supplied.
+-- ON CONFLICT (recipe_id, tag_id) still targets the UNIQUE(recipe_id,
+-- tag_id) constraint even though it's no longer the primary key.
 -- ----------------------------------------------------------------------------
 INSERT INTO recipe_tags (recipe_id, tag_id)
 SELECT r.id, t.id

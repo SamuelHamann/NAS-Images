@@ -72,15 +72,17 @@ single service.
 | ------------------------------------------ | ---- | --------------------------------------------------------------------------------------------- |
 | `initdb/01-create-databases.sh`            | sh   | Reads `POSTGRES_MULTIPLE_DATABASES`; for each entry creates a login role and a DB it owns.    |
 | `initdb/02-init-whatsfordinner.sql`        | sql  | Schema for the **WhatsForDinner** app (recipes, ingredients, units, tags, pantry stock, cook history, API keys). |
+| `initdb/03-seed-whatsfordinner.sql`        | sql  | Bogus / development seed data for every WhatsForDinner table (idempotent — safe to replay). |
 
 ## migrate service
 
-A dedicated `migrate` service in `compose.yaml` runs the schema SQL
-file on **every** `docker compose up`, then exits. Because all
-`CREATE TABLE` / `CREATE INDEX` / `CREATE EXTENSION` statements use
-`IF NOT EXISTS`, replaying the file against an already-initialised
-database is safe — existing objects are skipped and new ones are
-created automatically.
+A dedicated `migrate` service in `compose.yaml` applies every `*.sql`
+file under `initdb/` (in alphabetical order) on **every**
+`docker compose up`, then exits. Because all `CREATE TABLE` /
+`CREATE INDEX` / `CREATE EXTENSION` statements use `IF NOT EXISTS`, and
+every seed `INSERT` uses `ON CONFLICT` / `WHERE NOT EXISTS`, replaying
+the files against an already-initialised database is safe — existing
+objects/rows are skipped and new ones are created automatically.
 
 ```bash
 # Apply migrations as part of a normal stack start:
@@ -94,11 +96,13 @@ To add a new database:
 
 1. Append its name to `POSTGRES_MULTIPLE_DATABASES` in `.env`.
 2. Add a `POSTGRES_<NAME>_PASSWORD=…` entry in `.env`.
-3. Create a new `initdb/NN-init-<name>.sql` (next free `NN`, e.g. `03-`)
+3. Create a new `initdb/NN-init-<name>.sql` (next free `NN`, e.g. `04-`)
    that `\connect`s to the app database, creates its tables, and
    `ALTER … OWNER TO <name>;` every table **and sequence**.
-4. Add the new SQL file to the `migrate` service's `command` (or add a
-   second `migrate` service) so it is applied on the next `docker compose up`.
+4. That's it — the `migrate` service's `command` loops over every
+   `initdb/*.sql` file in alphabetical order, so the new file is picked
+   up automatically on the next `docker compose up` with no compose.yaml
+   changes needed.
 
 ## How to deploy
 
