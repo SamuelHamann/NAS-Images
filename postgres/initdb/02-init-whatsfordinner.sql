@@ -150,6 +150,18 @@ CREATE TABLE IF NOT EXISTS food_locations (
 );
 
 
+-- ----------------------------------------------------------------------------
+-- Pantry  (a named collection of ingredients, owned by one or more users)
+-- ----------------------------------------------------------------------------
+-- Defined here — before pantry_ingredients — so the FK reference in that
+-- table resolves correctly when Postgres processes the DDL in order.
+CREATE TABLE IF NOT EXISTS pantry (
+    id         bigserial    PRIMARY KEY,
+    name       text         NOT NULL,
+    created_at timestamptz  NOT NULL DEFAULT now(),
+    updated_at timestamptz  NOT NULL DEFAULT now()
+);
+
 
 -- ----------------------------------------------------------------------------
 -- Pantry ingredients  (what we currently have in stock at home)
@@ -210,7 +222,7 @@ CREATE INDEX IF NOT EXISTS pantry_stocked_idx
 -- the recipe they refer to.
 CREATE TABLE IF NOT EXISTS past_cooked_recipes (
     id              uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
-    recipe_id       uuid         NOT NULL UNIQUE REFERENCES recipes(id) ON DELETE CASCADE,
+    recipe_id       bigint       NOT NULL UNIQUE REFERENCES recipes(id) ON DELETE CASCADE,
     times_cooked    int          NOT NULL DEFAULT 1 CHECK (times_cooked >= 1),
     last_cooked_at  timestamptz  NOT NULL DEFAULT now()
 );
@@ -254,14 +266,6 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-
-CREATE TABLE IF NOT EXISTS pantry (
-    id bigserial PRIMARY KEY,
-    name text NOT NULL,
-    created_at timestamptz NOT NULL DEFAULT now(),
-    updated_at timestamptz NOT NULL DEFAULT now()
-);
-
 -- User pantry
 
 CREATE TABLE IF NOT EXISTS user_pantry (
@@ -285,11 +289,18 @@ ALTER TABLE food_locations       OWNER TO whatsfordinner;
 ALTER TABLE pantry_ingredients   OWNER TO whatsfordinner;
 ALTER TABLE past_cooked_recipes  OWNER TO whatsfordinner;
 ALTER TABLE api_keys             OWNER TO whatsfordinner;
+ALTER TABLE users                OWNER TO whatsfordinner;
+ALTER TABLE pantry               OWNER TO whatsfordinner;
+ALTER TABLE user_pantry          OWNER TO whatsfordinner;
 
 -- Sequences backing the bigserial PKs are separate objects and must be
 -- transferred too — otherwise INSERTs fail with "permission denied for
 -- sequence …_id_seq".
-ALTER SEQUENCE ingredients_id_seq  OWNER TO whatsfordinner;
-ALTER SEQUENCE units_id_seq        OWNER TO whatsfordinner;
-ALTER SEQUENCE tags_id_seq         OWNER TO whatsfordinner;
+ALTER SEQUENCE recipes_id_seq        OWNER TO whatsfordinner;
+ALTER SEQUENCE ingredients_id_seq    OWNER TO whatsfordinner;
+ALTER SEQUENCE units_id_seq          OWNER TO whatsfordinner;
+ALTER SEQUENCE tags_id_seq           OWNER TO whatsfordinner;
 ALTER SEQUENCE food_locations_id_seq OWNER TO whatsfordinner;
+ALTER SEQUENCE users_id_seq          OWNER TO whatsfordinner;
+ALTER SEQUENCE pantry_id_seq         OWNER TO whatsfordinner;
+ALTER SEQUENCE user_pantry_id_seq    OWNER TO whatsfordinner;

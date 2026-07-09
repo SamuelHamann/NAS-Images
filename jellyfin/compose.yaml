@@ -1,0 +1,18 @@
+services:
+  jellyfin:
+    image: nyanmisaka/jellyfin:latest
+    container_name: jellyfin
+    restart: always
+    devices:
+      - /dev/dri:/dev/dri  # Integrated graphics
+    environment:
+      PUID: 0
+      PGID: 0
+    volumes:
+      - ./config:/config
+      - ./cache:/cache
+      - /volume2/MediaVol2:/MediaVol2 #Library location
+      - /volume3/MediaVol3:/MediaVol3 #Library location
+    ports:
+      - 9096:8096/TCP
+    network_mode: "bridge"

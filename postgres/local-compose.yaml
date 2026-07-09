@@ -92,12 +92,15 @@ services:
       # Mount initdb read-only — the migrate container only reads SQL files.
       - ./initdb:/initdb:ro
 
-    # Connect as the superuser to the maintenance database; the \connect
-    # meta-command inside the SQL file switches to whatsfordinner.
+    # Connect as the superuser to the maintenance database.  Each SQL
+    # file's \connect meta-command switches to its target database.
+    # Files run in alphabetical order: 02-init (DDL schema) first,
+    # then 03-seed (test / bogus data).  All statements are idempotent
+    # so replaying is safe on an already-initialised cluster.
     command:
       - sh
       - -c
-      - 'psql -h postgres -U "$$POSTGRES_USER" -d postgres -f /initdb/02-init-whatsfordinner.sql'
+      - 'for f in /initdb/*.sql; do echo "[migrate] Applying $$f ..."; psql -h postgres -U "$$POSTGRES_USER" -d postgres -f "$$f" || exit 1; done'
 
     logging:
       driver: json-file
