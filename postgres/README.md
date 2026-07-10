@@ -71,7 +71,7 @@ single service.
 | File                                       | Type | What it does                                                                                  |
 | ------------------------------------------ | ---- | --------------------------------------------------------------------------------------------- |
 | `initdb/01-create-databases.sh`            | sh   | Reads `POSTGRES_MULTIPLE_DATABASES`; for each entry creates a login role and a DB it owns.    |
-| `initdb/02-init-whatsfordinner.sql`        | sql  | Schema for the **WhatsForDinner** app (recipes, ingredients, units, tags, pantry stock, cook history, API keys). |
+| `initdb/02-init-whatsfordinner.sql`        | sql  | Schema for the **WhatsForDinner** app (recipes, ingredients, ingredient tags, combined ingredients, units, tags, pantry stock, cook history, API keys). |
 | `initdb/03-seed-whatsfordinner.sql`        | sql  | Bogus / development seed data for every WhatsForDinner table (idempotent — safe to replay). |
 
 ## migrate service

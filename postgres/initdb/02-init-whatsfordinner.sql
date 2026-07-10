@@ -135,6 +135,77 @@ CREATE INDEX IF NOT EXISTS recipe_tags_tag_idx ON recipe_tags (tag_id);
 
 
 -- ----------------------------------------------------------------------------
+-- Ingredient ⇆ Tag (junction — reuses the shared `tags` table)
+-- ----------------------------------------------------------------------------
+-- Lets ingredients carry the same kind of labels recipes do — e.g.
+-- 'vegan', 'gluten-free', 'dairy', 'nut' — so the app can answer
+-- "does this recipe contain any dairy ingredients?" by joining through
+-- recipe_ingredients → ingredient_tags → tags, without a second tags
+-- table to keep in sync.
+-- ON DELETE CASCADE on both sides: removing an ingredient or a tag
+-- simply drops the association; neither side is reference data that
+-- needs protecting the way food_locations/units are.
+CREATE TABLE IF NOT EXISTS ingredient_tags (
+    ingredient_id   bigint    NOT NULL REFERENCES ingredients(id) ON DELETE CASCADE,
+    tag_id          bigint    NOT NULL REFERENCES tags(id)        ON DELETE CASCADE,
+    PRIMARY KEY (ingredient_id, tag_id)
+);
+
+-- Reverse lookup: "which ingredients have this tag?" (e.g. all 'dairy').
+CREATE INDEX IF NOT EXISTS ingredient_tags_tag_idx ON ingredient_tags (tag_id);
+
+
+-- ----------------------------------------------------------------------------
+-- Combined ingredients  (a named bundle of ingredients with its own quantity)
+-- ----------------------------------------------------------------------------
+-- Models things like "Taco Seasoning Mix" or "Basic Tomato Sauce Base" —
+-- a reusable, pre-made combination of several ingredients (each with its
+-- own quantity/unit) that itself behaves like a single ingredient with a
+-- total quantity/unit (e.g. "makes 250 g of mix").
+--
+-- Kept as its own table (rather than overloading `ingredients`) because a
+-- combined ingredient always has a recipe-like breakdown of parts, while
+-- a plain ingredient never does — mixing the two concepts in one table
+-- would make `ingredients` nullable in confusing ways.
+--
+-- `quantity`/`unit_id` describe the *yield* of the whole bundle (e.g. "1
+-- batch = 100 g"), independent of how much of each component went in —
+-- those live on combined_ingredient_items instead.
+CREATE TABLE IF NOT EXISTS combined_ingredients (
+    id          bigserial     PRIMARY KEY,
+    name        citext        NOT NULL UNIQUE,
+    quantity    numeric(10,3) NOT NULL CHECK (quantity >= 0),
+    unit_id     bigint        REFERENCES units(id) ON DELETE RESTRICT,
+    note        text,
+    created_at  timestamptz   NOT NULL DEFAULT now(),
+    updated_at  timestamptz   NOT NULL DEFAULT now()
+);
+
+
+-- ----------------------------------------------------------------------------
+-- Combined ingredient ⇆ Ingredient (junction with quantity + unit)
+-- ----------------------------------------------------------------------------
+-- One row per component ingredient in the bundle, each with its own
+-- quantity/unit (e.g. "2 tbsp Paprika" as part of "Taco Seasoning Mix").
+-- ON DELETE CASCADE on the combined-ingredient side: deleting the bundle
+-- removes its component lines. ON DELETE RESTRICT on the ingredient &
+-- unit sides: refuse to drop reference data that's still in use.
+-- Mirrors recipe_ingredients' shape/semantics for consistency.
+CREATE TABLE IF NOT EXISTS combined_ingredient_items (
+    combined_ingredient_id  bigint        NOT NULL REFERENCES combined_ingredients(id) ON DELETE CASCADE,
+    ingredient_id           bigint        NOT NULL REFERENCES ingredients(id)           ON DELETE RESTRICT,
+    quantity                numeric(10,3) CHECK (quantity IS NULL OR quantity >= 0),
+    unit_id                 bigint        REFERENCES units(id)                          ON DELETE RESTRICT,
+    note                    text,                    -- e.g. 'finely chopped'
+    PRIMARY KEY (combined_ingredient_id, ingredient_id)
+);
+
+-- Reverse lookup: "which combined ingredients use this ingredient?"
+CREATE INDEX IF NOT EXISTS combined_ingredient_items_ingredient_idx
+    ON combined_ingredient_items (ingredient_id);
+
+
+-- ----------------------------------------------------------------------------
 -- Food locations  (where an ingredient is physically stored)
 -- ----------------------------------------------------------------------------
 -- A small reference table — fridge, freezer, pantry, spice rack, etc. —
@@ -285,6 +356,9 @@ ALTER TABLE units                OWNER TO whatsfordinner;
 ALTER TABLE recipe_ingredients   OWNER TO whatsfordinner;
 ALTER TABLE tags                 OWNER TO whatsfordinner;
 ALTER TABLE recipe_tags          OWNER TO whatsfordinner;
+ALTER TABLE ingredient_tags       OWNER TO whatsfordinner;
+ALTER TABLE combined_ingredients      OWNER TO whatsfordinner;
+ALTER TABLE combined_ingredient_items OWNER TO whatsfordinner;
 ALTER TABLE food_locations       OWNER TO whatsfordinner;
 ALTER TABLE pantry_ingredients   OWNER TO whatsfordinner;
 ALTER TABLE past_cooked_recipes  OWNER TO whatsfordinner;
@@ -300,6 +374,7 @@ ALTER SEQUENCE recipes_id_seq        OWNER TO whatsfordinner;
 ALTER SEQUENCE ingredients_id_seq    OWNER TO whatsfordinner;
 ALTER SEQUENCE units_id_seq          OWNER TO whatsfordinner;
 ALTER SEQUENCE tags_id_seq           OWNER TO whatsfordinner;
+ALTER SEQUENCE combined_ingredients_id_seq OWNER TO whatsfordinner;
 ALTER SEQUENCE food_locations_id_seq OWNER TO whatsfordinner;
 ALTER SEQUENCE users_id_seq          OWNER TO whatsfordinner;
 ALTER SEQUENCE pantry_id_seq         OWNER TO whatsfordinner;

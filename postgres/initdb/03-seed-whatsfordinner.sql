@@ -114,6 +114,10 @@ ON CONFLICT (name) DO NOTHING;
 
 -- ----------------------------------------------------------------------------
 -- tags
+-- Shared by both recipes (recipe_tags) and ingredients (ingredient_tags).
+-- The first block are recipe-level / meal-planning tags; the second block
+-- are ingredient-classification tags (used to answer "does this recipe
+-- contain any dairy/nut/gluten ingredients?" via ingredient_tags).
 -- ----------------------------------------------------------------------------
 INSERT INTO tags (name) VALUES
     ('Italian'),
@@ -133,7 +137,20 @@ INSERT INTO tags (name) VALUES
     ('Mediterranean'),
     ('Comfort Food'),
     ('Meal Prep'),
-    ('Budget-Friendly')
+    ('Budget-Friendly'),
+    -- Ingredient-classification tags
+    ('Dairy'),
+    ('Meat'),
+    ('Poultry'),
+    ('Gluten'),
+    ('Grain'),
+    ('Legume'),
+    ('Vegetable'),
+    ('Fruit'),
+    ('Spice'),
+    ('Condiment'),
+    ('Nut-Free'),
+    ('Sweetener')
 ON CONFLICT (name) DO NOTHING;
 
 
@@ -427,6 +444,124 @@ FROM (VALUES
 JOIN recipes r ON r.name = q.rname
 JOIN tags    t ON t.name = q.tname
 ON CONFLICT (recipe_id, tag_id) DO NOTHING;
+
+
+-- ----------------------------------------------------------------------------
+-- ingredient_tags
+-- Classifies a subset of ingredients so the app can answer questions like
+-- "does this recipe contain dairy?" by joining recipe_ingredients →
+-- ingredient_tags → tags. Not every ingredient needs a tag — only ones
+-- where the classification is useful (allergens, food groups, etc.).
+-- ----------------------------------------------------------------------------
+INSERT INTO ingredient_tags (ingredient_id, tag_id)
+SELECT i.id, t.id
+FROM (VALUES
+    -- Dairy
+    ('Milk'::text,             'Dairy'::text),
+    ('Butter',                 'Dairy'),
+    ('Feta Cheese',            'Dairy'),
+    ('Cheddar Cheese',         'Dairy'),
+    ('Sour Cream',             'Dairy'),
+    -- Meat / poultry
+    ('Ground Beef',            'Meat'),
+    ('Chicken Breast',         'Poultry'),
+    -- Gluten-containing
+    ('Spaghetti',              'Gluten'),
+    ('Sourdough Bread',        'Gluten'),
+    ('Taco Shells',            'Gluten'),
+    ('All-Purpose Flour',      'Gluten'),
+    ('All-Purpose Flour',      'Grain'),
+    ('Basmati Rice',           'Grain'),
+    -- Legumes
+    ('Chickpeas',              'Legume'),
+    -- Vegetables
+    ('Onion',                  'Vegetable'),
+    ('Garlic',                 'Vegetable'),
+    ('Broccoli',               'Vegetable'),
+    ('Cucumber',               'Vegetable'),
+    ('Cherry Tomatoes',        'Vegetable'),
+    ('Red Onion',              'Vegetable'),
+    ('Romaine Lettuce',        'Vegetable'),
+    -- Fruits
+    ('Avocado',                'Fruit'),
+    ('Banana',                 'Fruit'),
+    ('Lemon Juice',            'Fruit'),
+    ('Lime',                   'Fruit'),
+    -- Spices
+    ('Salt',                   'Spice'),
+    ('Black Pepper',           'Spice'),
+    ('Red Pepper Flakes',      'Spice'),
+    ('Dried Oregano',          'Spice'),
+    ('Curry Powder',           'Spice'),
+    ('Turmeric',               'Spice'),
+    ('Paprika',                'Spice'),
+    ('Cumin',                  'Spice'),
+    ('Ginger',                 'Spice'),
+    -- Condiments
+    ('Soy Sauce',              'Condiment'),
+    ('Salsa',                  'Condiment'),
+    ('Red Wine Vinegar',       'Condiment'),
+    ('Olive Oil',              'Condiment'),
+    ('Sesame Oil',             'Condiment'),
+    -- Sweeteners
+    ('Sugar',                  'Sweetener'),
+    ('Brown Sugar',            'Sweetener'),
+    ('Vanilla Extract',        'Sweetener'),
+    ('Chocolate Chips',        'Sweetener')
+) AS q(iname, tname)
+JOIN ingredients i ON i.name = q.iname
+JOIN tags        t ON t.name = q.tname
+ON CONFLICT (ingredient_id, tag_id) DO NOTHING;
+
+
+-- ----------------------------------------------------------------------------
+-- combined_ingredients
+-- Named, pre-made bundles of ingredients — each bundle has its own total
+-- yield (quantity/unit) independent of the quantities of its components,
+-- which are added below via combined_ingredient_items.
+-- No natural UNIQUE constraint besides `name`, which already has one —
+-- ON CONFLICT (name) keeps re-runs idempotent.
+-- ----------------------------------------------------------------------------
+INSERT INTO combined_ingredients (name, quantity, unit_id, note)
+SELECT v.name, v.qty, u.id, v.note
+FROM (VALUES
+    ('Taco Seasoning Mix'::text,      3::numeric, 'tbsp'::text, 'Enough for 500 g of ground beef'::text),
+    ('Basic Tomato Sauce Base',       500,        'ml',         'Simmered ~20 min until thickened'),
+    ('Curry Spice Blend',             2,          'tbsp',       'Curry powder + turmeric + cumin mix')
+) AS v(name, qty, uname, note)
+JOIN units u ON u.name = v.uname
+ON CONFLICT (name) DO NOTHING;
+
+
+-- ----------------------------------------------------------------------------
+-- combined_ingredient_items
+-- Component ingredients for each bundle above, each with its own
+-- quantity/unit. Resolved via name-joins so the seed is resilient to
+-- serial gaps between re-runs; ON CONFLICT guards duplicate component
+-- lines on replay.
+-- ----------------------------------------------------------------------------
+INSERT INTO combined_ingredient_items (combined_ingredient_id, ingredient_id, quantity, unit_id, note)
+SELECT c.id, i.id, q.qty, u.id, q.note
+FROM (VALUES
+    -- cname                          iname                 qty          uname     note
+    ('Taco Seasoning Mix'::text,      'Paprika'::text,      2::numeric,  'tbsp'::text, NULL::text),
+    ('Taco Seasoning Mix',            'Cumin',              2,           'tbsp',       NULL),
+    ('Taco Seasoning Mix',            'Salt',               1,           'tsp',        NULL),
+    ('Taco Seasoning Mix',            'Black Pepper',       1,           'tsp',        NULL),
+    ('Taco Seasoning Mix',            'Red Pepper Flakes',  0.5,         'tsp',        'optional, for heat'),
+    ('Basic Tomato Sauce Base',       'Tomato Sauce',       400,         'ml',         NULL),
+    ('Basic Tomato Sauce Base',       'Onion',              1,           'piece',      'finely diced'),
+    ('Basic Tomato Sauce Base',       'Garlic',             2,           'clove',      'minced'),
+    ('Basic Tomato Sauce Base',       'Olive Oil',          1,           'tbsp',       NULL),
+    ('Basic Tomato Sauce Base',       'Dried Oregano',      1,           'tsp',        NULL),
+    ('Curry Spice Blend',             'Curry Powder',       1,           'tbsp',       NULL),
+    ('Curry Spice Blend',             'Turmeric',           0.5,         'tbsp',       NULL),
+    ('Curry Spice Blend',             'Cumin',              0.5,         'tbsp',       NULL)
+) AS q(cname, iname, qty, uname, note)
+JOIN combined_ingredients c ON c.name = q.cname
+JOIN ingredients          i ON i.name = q.iname
+JOIN units                u ON u.name = q.uname
+ON CONFLICT (combined_ingredient_id, ingredient_id) DO NOTHING;
 
 
 -- ----------------------------------------------------------------------------
