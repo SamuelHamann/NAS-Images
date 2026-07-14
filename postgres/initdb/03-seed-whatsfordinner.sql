@@ -201,7 +201,8 @@ WHERE NOT EXISTS (SELECT 1 FROM pantry WHERE name = v.name);
 
 
 -- ----------------------------------------------------------------------------
--- recipes  — 8 sample recipes spanning diverse cuisines and meal types.
+-- recipes  — 8 built-in recipes plus 1 user-created recipe (linked to its
+-- author below via user_recipes) spanning diverse cuisines and meal types.
 -- No UNIQUE constraint on name — WHERE NOT EXISTS prevents duplicates.
 -- ----------------------------------------------------------------------------
 INSERT INTO recipes
@@ -266,6 +267,13 @@ FROM (VALUES
         E'1. Cream softened butter with brown and white sugar until light.\n2. Beat in eggs and vanilla extract.\n3. Fold in flour, baking soda, salt, and chocolate chips.\n4. Bake at 180 °C for 12 min until golden at the edges.',
         'https://example.com/recipes/choc-chip-cookies',
         '24', '15', '12'
+    ),
+    (
+        'Charlie''s Weeknight Fried Rice',
+        'A user-submitted recipe for using up leftover rice and whatever vegetables are on hand.',
+        E'1. Scramble eggs in a hot wok; set aside.\n2. Stir-fry day-old basmati rice with soy sauce and garlic.\n3. Fold in broccoli and the scrambled eggs; finish with sesame oil.',
+        NULL,
+        '2', '10', '10'
     )
 ) AS v(name, description, instructions, source_url, servings, prep, cook)
 WHERE NOT EXISTS (SELECT 1 FROM recipes WHERE name = v.name);
@@ -310,6 +318,59 @@ WHERE  u.username = 'charlie_eats'
            SELECT 1 FROM user_pantry up
            WHERE  up.id_user = u.id AND up.id_pantry = p.id
        );
+
+
+-- ----------------------------------------------------------------------------
+-- user_recipes
+-- Marks recipes authored by a user rather than shipped as seed data.
+-- Only "Charlie's Weeknight Fried Rice" has a row here; the other 8
+-- recipes represent built-in / stock content with no author.
+-- recipe_id is UNIQUE (it's the PK) — ON CONFLICT keeps re-runs idempotent.
+-- ----------------------------------------------------------------------------
+INSERT INTO user_recipes (recipe_id, user_id)
+SELECT r.id, u.id
+FROM   recipes r
+JOIN   users   u ON u.username = 'charlie_eats'
+WHERE  r.name = 'Charlie''s Weeknight Fried Rice'
+ON CONFLICT (recipe_id) DO NOTHING;
+
+
+-- ----------------------------------------------------------------------------
+-- collections
+-- One named collection per user. UNIQUE(user_id, name) — ON CONFLICT keeps
+-- re-runs idempotent.
+-- ----------------------------------------------------------------------------
+INSERT INTO collections (user_id, name)
+SELECT u.id, v.cname
+FROM (VALUES
+    ('alice_foodie'::text, 'Favorites'::text),
+    ('bob_chef',           'Weeknight Dinners'),
+    ('charlie_eats',       'Breakfast Ideas')
+) AS v(username, cname)
+JOIN users u ON u.username = v.username
+ON CONFLICT (user_id, name) DO NOTHING;
+
+
+-- ----------------------------------------------------------------------------
+-- collection_recipes
+-- A handful of recipes added to each collection above to exercise the
+-- collection flow. PK is (collection_id, recipe_id) — ON CONFLICT keeps
+-- re-runs idempotent.
+-- ----------------------------------------------------------------------------
+INSERT INTO collection_recipes (collection_id, recipe_id)
+SELECT c.id, r.id
+FROM (VALUES
+    ('alice_foodie'::text, 'Favorites'::text,          'Classic Spaghetti Bolognese'::text),
+    ('alice_foodie',       'Favorites',                 'Greek Salad'),
+    ('bob_chef',           'Weeknight Dinners',         'Beef Tacos'),
+    ('bob_chef',           'Weeknight Dinners',         'Chicken Stir Fry'),
+    ('charlie_eats',       'Breakfast Ideas',           'Avocado Toast'),
+    ('charlie_eats',       'Breakfast Ideas',           'Charlie''s Weeknight Fried Rice')
+) AS v(username, cname, rname)
+JOIN users       u ON u.username = v.username
+JOIN collections c ON c.user_id = u.id AND c.name = v.cname
+JOIN recipes     r ON r.name = v.rname
+ON CONFLICT (collection_id, recipe_id) DO NOTHING;
 
 
 -- ----------------------------------------------------------------------------

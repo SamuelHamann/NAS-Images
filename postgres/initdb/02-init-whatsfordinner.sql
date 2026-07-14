@@ -387,6 +387,69 @@ CREATE INDEX IF NOT EXISTS pending_pantry_items_upc_idx
 
 
 -- ----------------------------------------------------------------------------
+-- User recipes  (marks a recipe as authored by a user, rather than seed data)
+-- ----------------------------------------------------------------------------
+-- `recipes` holds both built-in seed recipes and user-created ones; a row
+-- here means "this recipe was created by this user" — seed recipes simply
+-- have no row. `recipe_id` is the PRIMARY KEY (not part of a composite
+-- key) because a recipe has exactly one author, so the relationship is
+-- one-user-to-many-recipes rather than many-to-many.
+-- ON DELETE CASCADE both ways: deleting the recipe drops the authorship
+-- record, and deleting the user drops authorship of their recipes (the
+-- recipes themselves are untouched, they just become unauthored).
+CREATE TABLE IF NOT EXISTS user_recipes (
+    recipe_id   bigint      PRIMARY KEY REFERENCES recipes(id) ON DELETE CASCADE,
+    user_id     bigint      NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+-- "Which recipes has this user created?"
+CREATE INDEX IF NOT EXISTS user_recipes_user_idx
+    ON user_recipes (user_id);
+
+
+-- ----------------------------------------------------------------------------
+-- Collections  (user-curated, named lists of recipes — e.g. "Weeknight
+-- Dinners", "Meal Prep Sunday")
+-- ----------------------------------------------------------------------------
+-- Each collection is owned by exactly one user. UNIQUE(user_id, name)
+-- stops the same user creating two collections with the same name while
+-- still letting different users each have e.g. a "Favorites" collection.
+-- ON DELETE CASCADE: a collection has no meaning once its owner is gone.
+CREATE TABLE IF NOT EXISTS collections (
+    id          bigserial   PRIMARY KEY,
+    user_id     bigint      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name        text        NOT NULL,
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    updated_at  timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (user_id, name)
+);
+
+-- "Which collections does this user have?"
+CREATE INDEX IF NOT EXISTS collections_user_idx
+    ON collections (user_id);
+
+
+-- ----------------------------------------------------------------------------
+-- Collection ⇆ Recipe (junction — recipes added to a collection)
+-- ----------------------------------------------------------------------------
+-- True many-to-many: a recipe can sit in many collections (including
+-- collections owned by different users) and a collection can hold many
+-- recipes. ON DELETE CASCADE on both sides: the entry is meaningless once
+-- either the collection or the recipe is gone.
+CREATE TABLE IF NOT EXISTS collection_recipes (
+    collection_id  bigint      NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+    recipe_id      bigint      NOT NULL REFERENCES recipes(id)     ON DELETE CASCADE,
+    created_at     timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (collection_id, recipe_id)
+);
+
+-- Reverse lookup: "which collections include this recipe?"
+CREATE INDEX IF NOT EXISTS collection_recipes_recipe_idx
+    ON collection_recipes (recipe_id);
+
+
+-- ----------------------------------------------------------------------------
 -- Hand ownership over to the app role
 -- ----------------------------------------------------------------------------
 -- After this, the `whatsfordinner` role can ALTER / DROP / migrate any
@@ -408,6 +471,9 @@ ALTER TABLE api_keys             OWNER TO whatsfordinner;
 ALTER TABLE users                OWNER TO whatsfordinner;
 ALTER TABLE pantry               OWNER TO whatsfordinner;
 ALTER TABLE user_pantry          OWNER TO whatsfordinner;
+ALTER TABLE user_recipes         OWNER TO whatsfordinner;
+ALTER TABLE collections          OWNER TO whatsfordinner;
+ALTER TABLE collection_recipes   OWNER TO whatsfordinner;
 
 -- Sequences backing the bigserial PKs are separate objects and must be
 -- transferred too — otherwise INSERTs fail with "permission denied for
@@ -421,3 +487,4 @@ ALTER SEQUENCE food_locations_id_seq OWNER TO whatsfordinner;
 ALTER SEQUENCE users_id_seq          OWNER TO whatsfordinner;
 ALTER SEQUENCE pantry_id_seq         OWNER TO whatsfordinner;
 ALTER SEQUENCE user_pantry_id_seq    OWNER TO whatsfordinner;
+ALTER SEQUENCE collections_id_seq    OWNER TO whatsfordinner;
