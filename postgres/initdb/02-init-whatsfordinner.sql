@@ -358,8 +358,12 @@ CREATE TABLE IF NOT EXISTS user_pantry (
 -- `upc` is intentionally NOT unique: the same barcode can be scanned more
 -- than once before either scan has been processed, and each scan gets its
 -- own row.
+-- `pantry_id` records which pantry the item will join once approved.
+-- ON DELETE CASCADE mirrors pantry_ingredients.pantry_id: a pending item
+-- has no meaning once its destination pantry is gone.
 CREATE TABLE IF NOT EXISTS pending_pantry_items (
     id          uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
+    pantry_id   bigint        NOT NULL REFERENCES pantry(id) ON DELETE CASCADE,
     upc         text          NOT NULL,
     name        text          NOT NULL,
     quantity    numeric(10,3) NOT NULL CHECK (quantity >= 0),
@@ -371,9 +375,10 @@ CREATE TABLE IF NOT EXISTS pending_pantry_items (
     updated_at  timestamptz   NOT NULL DEFAULT now()
 );
 
--- "What's still waiting on review?" — the common queue-processing query.
-CREATE INDEX IF NOT EXISTS pending_pantry_items_status_idx
-    ON pending_pantry_items (status)
+-- "What's still waiting on review?" — the common queue-processing query,
+-- typically scoped to one pantry at a time.
+CREATE INDEX IF NOT EXISTS pending_pantry_items_pantry_status_idx
+    ON pending_pantry_items (pantry_id, status)
     WHERE status IN ('pending', 'processing');
 
 -- Look up all pending scans for a given barcode.

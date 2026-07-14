@@ -691,9 +691,10 @@ ON CONFLICT (key) DO NOTHING;
 -- No UNIQUE constraint (upc is intentionally not unique) — guarded with
 -- WHERE NOT EXISTS on (upc, name) so re-runs don't duplicate rows.
 -- Covers all four statuses so the app can exercise the whole queue flow.
+-- All seeded against Alice's Pantry.
 -- ----------------------------------------------------------------------------
-INSERT INTO pending_pantry_items (upc, name, quantity, unit_id, price, status)
-SELECT v.upc, v.name, v.qty, u.id, v.price, v.status
+INSERT INTO pending_pantry_items (pantry_id, upc, name, quantity, unit_id, price, status)
+SELECT p.id, v.upc, v.name, v.qty, u.id, v.price, v.status
 FROM (VALUES
     -- upc                 name                  qty          uname      price         status
     ('0041220576804'::text, 'Whole Milk'::text,     1::numeric, 'L'::text,   3.49::numeric, 'pending'::text),
@@ -702,8 +703,9 @@ FROM (VALUES
     ('0044000032973',       'Chocolate Chips',      300,         'g',         3.99,          'approved'),
     ('0002100034994',       'Sour Cream',           400,         'ml',        2.49,          'rejected')
 ) AS v(upc, name, qty, uname, price, status)
-JOIN units u ON u.name = v.uname
+JOIN units  u ON u.name = v.uname
+JOIN pantry p ON p.name = 'Alice''s Pantry'
 WHERE NOT EXISTS (
-    SELECT 1 FROM pending_pantry_items p
-    WHERE p.upc = v.upc AND p.name = v.name
+    SELECT 1 FROM pending_pantry_items pp
+    WHERE pp.upc = v.upc AND pp.name = v.name
 );
