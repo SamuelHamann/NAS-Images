@@ -346,6 +346,42 @@ CREATE TABLE IF NOT EXISTS user_pantry (
 );
 
 -- ----------------------------------------------------------------------------
+-- Pending pantry items  (scanned/queued items awaiting review before they
+-- join pantry_ingredients)
+-- ----------------------------------------------------------------------------
+-- Models the intake queue for e.g. a barcode-scanning flow: a row is
+-- created as soon as an item is scanned, then reviewed and either merged
+-- into pantry_ingredients ('approved') or discarded ('rejected').
+-- `name` is free text (not a FK to ingredients) because the UPC lookup may
+-- return a name that hasn't been matched to a canonical ingredient yet —
+-- that resolution happens when the item is approved.
+-- `upc` is intentionally NOT unique: the same barcode can be scanned more
+-- than once before either scan has been processed, and each scan gets its
+-- own row.
+CREATE TABLE IF NOT EXISTS pending_pantry_items (
+    id          uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
+    upc         text          NOT NULL,
+    name        text          NOT NULL,
+    quantity    numeric(10,3) NOT NULL CHECK (quantity >= 0),
+    unit_id     bigint        REFERENCES units(id) ON DELETE RESTRICT,
+    price       numeric(10,2) CHECK (price IS NULL OR price >= 0),
+    status      text          NOT NULL DEFAULT 'pending'
+                              CHECK (status IN ('pending', 'processing', 'approved', 'rejected')),
+    created_at  timestamptz   NOT NULL DEFAULT now(),
+    updated_at  timestamptz   NOT NULL DEFAULT now()
+);
+
+-- "What's still waiting on review?" — the common queue-processing query.
+CREATE INDEX IF NOT EXISTS pending_pantry_items_status_idx
+    ON pending_pantry_items (status)
+    WHERE status IN ('pending', 'processing');
+
+-- Look up all pending scans for a given barcode.
+CREATE INDEX IF NOT EXISTS pending_pantry_items_upc_idx
+    ON pending_pantry_items (upc);
+
+
+-- ----------------------------------------------------------------------------
 -- Hand ownership over to the app role
 -- ----------------------------------------------------------------------------
 -- After this, the `whatsfordinner` role can ALTER / DROP / migrate any
@@ -361,6 +397,7 @@ ALTER TABLE combined_ingredients      OWNER TO whatsfordinner;
 ALTER TABLE combined_ingredient_items OWNER TO whatsfordinner;
 ALTER TABLE food_locations       OWNER TO whatsfordinner;
 ALTER TABLE pantry_ingredients   OWNER TO whatsfordinner;
+ALTER TABLE pending_pantry_items OWNER TO whatsfordinner;
 ALTER TABLE past_cooked_recipes  OWNER TO whatsfordinner;
 ALTER TABLE api_keys             OWNER TO whatsfordinner;
 ALTER TABLE users                OWNER TO whatsfordinner;
