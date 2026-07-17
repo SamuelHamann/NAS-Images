@@ -96,6 +96,39 @@ CREATE TABLE IF NOT EXISTS units (
 
 
 -- ----------------------------------------------------------------------------
+-- Ingredient nutrition  (macronutrients per ingredient, per a stated
+-- serving basis)
+-- ----------------------------------------------------------------------------
+-- One row per ingredient — `ingredient_id` is the PRIMARY KEY rather than
+-- part of a composite key, since nutrition facts are a 1:1 attribute of
+-- an ingredient, not a relation.
+-- Every value is reported against `serving_size`/`serving_unit_id` (e.g.
+-- "100 g") rather than the ingredient's pantry/recipe quantity, matching
+-- how nutrition labels work — the app scales these figures by whatever
+-- quantity is actually used elsewhere.
+-- All macro columns are nullable: nutrition data may be filled in
+-- gradually (or never, for some ingredients) without blocking the row
+-- from existing.
+-- ON DELETE CASCADE on ingredient_id: nutrition data has no meaning once
+-- the ingredient itself is gone. ON DELETE RESTRICT on serving_unit_id:
+-- refuse to drop reference data (units) that's still in use.
+CREATE TABLE IF NOT EXISTS ingredient_nutrition (
+    ingredient_id     bigint        PRIMARY KEY REFERENCES ingredients(id) ON DELETE CASCADE,
+    serving_size      numeric(10,3) NOT NULL DEFAULT 100 CHECK (serving_size > 0),
+    serving_unit_id   bigint        NOT NULL REFERENCES units(id) ON DELETE RESTRICT,
+    calories          numeric(10,2) CHECK (calories         IS NULL OR calories         >= 0),
+    fat_g             numeric(10,2) CHECK (fat_g             IS NULL OR fat_g             >= 0),
+    saturated_fat_g   numeric(10,2) CHECK (saturated_fat_g   IS NULL OR saturated_fat_g   >= 0),
+    carbohydrates_g   numeric(10,2) CHECK (carbohydrates_g   IS NULL OR carbohydrates_g   >= 0),
+    sugar_g           numeric(10,2) CHECK (sugar_g           IS NULL OR sugar_g           >= 0),
+    fiber_g           numeric(10,2) CHECK (fiber_g           IS NULL OR fiber_g           >= 0),
+    protein_g         numeric(10,2) CHECK (protein_g         IS NULL OR protein_g         >= 0),
+    sodium_mg         numeric(10,2) CHECK (sodium_mg         IS NULL OR sodium_mg         >= 0),
+    updated_at        timestamptz   NOT NULL DEFAULT now()
+);
+
+
+-- ----------------------------------------------------------------------------
 -- Recipe ⇆ Ingredient (junction with quantity + unit)
 -- ----------------------------------------------------------------------------
 -- ON DELETE CASCADE on the recipe side: deleting a recipe removes its
@@ -456,6 +489,7 @@ CREATE INDEX IF NOT EXISTS collection_recipes_recipe_idx
 -- object in its database without needing the postgres superuser.
 ALTER TABLE recipes              OWNER TO whatsfordinner;
 ALTER TABLE ingredients          OWNER TO whatsfordinner;
+ALTER TABLE ingredient_nutrition OWNER TO whatsfordinner;
 ALTER TABLE units                OWNER TO whatsfordinner;
 ALTER TABLE recipe_ingredients   OWNER TO whatsfordinner;
 ALTER TABLE tags                 OWNER TO whatsfordinner;

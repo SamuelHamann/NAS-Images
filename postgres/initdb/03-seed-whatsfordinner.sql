@@ -113,6 +113,44 @@ ON CONFLICT (name) DO NOTHING;
 
 
 -- ----------------------------------------------------------------------------
+-- ingredient_nutrition
+-- Macronutrients per stated serving (serving_size/serving_unit_id), not
+-- every ingredient — only a representative subset is seeded. Values are
+-- approximate USDA-style figures for test/dev purposes, not clinical data.
+-- ingredient_id is UNIQUE (it's the PK) — ON CONFLICT keeps re-runs
+-- idempotent.
+-- ----------------------------------------------------------------------------
+INSERT INTO ingredient_nutrition
+    (ingredient_id, serving_size, serving_unit_id, calories, fat_g,
+     saturated_fat_g, carbohydrates_g, sugar_g, fiber_g, protein_g, sodium_mg)
+SELECT i.id, v.serving, u.id, v.cal, v.fat, v.sat, v.carb, v.sugar, v.fiber, v.protein, v.sodium
+FROM (VALUES
+    -- iname                   serving       uname     cal      fat    sat    carb   sugar  fiber  protein  sodium
+    ('Spaghetti'::text,        100::numeric, 'g'::text, 371::numeric, 1.5,  0.3,   74.7,  2.7,   3.2,   13.0,    6.0),
+    ('Ground Beef',            100,          'g',       254,          20.0, 7.8,   0.0,   0.0,   0.0,   17.0,    66.0),
+    ('Chicken Breast',         100,          'g',       165,          3.6,  1.0,   0.0,   0.0,   0.0,   31.0,    74.0),
+    ('Olive Oil',              100,          'ml',      884,          100.0,13.8,  0.0,   0.0,   0.0,   0.0,     2.0),
+    ('Egg',                    100,          'g',       155,          11.0, 3.3,   1.1,   1.1,   0.0,   13.0,    124.0),
+    ('Milk',                   100,          'ml',      61,           3.3,  1.9,   4.8,   5.1,   0.0,   3.2,     43.0),
+    ('Butter',                 100,          'g',       717,          81.0, 51.0,  0.1,   0.1,   0.0,   0.9,     11.0),
+    ('Sugar',                  100,          'g',       387,          0.0,  0.0,   100.0, 100.0, 0.0,   0.0,     1.0),
+    ('All-Purpose Flour',      100,          'g',       364,          1.0,  0.2,   76.0,  0.3,   2.7,   10.0,    2.0),
+    ('Avocado',                100,          'g',       160,          14.7, 2.1,   8.5,   0.7,   6.7,   2.0,     7.0),
+    ('Banana',                 100,          'g',       89,           0.3,  0.1,   22.8,  12.2,  2.6,   1.1,     1.0),
+    ('Broccoli',               100,          'g',       34,           0.4,  0.1,   6.6,   1.7,   2.6,   2.8,     33.0),
+    ('Cheddar Cheese',         100,          'g',       403,          33.0, 21.0,  1.3,   0.5,   0.0,   25.0,    621.0),
+    ('Feta Cheese',            100,          'g',       264,          21.0, 15.0,  4.1,   4.1,   0.0,   14.0,    917.0),
+    ('Chickpeas',              100,          'g',       164,          2.6,  0.3,   27.4,  4.8,   7.6,   8.9,     7.0),
+    ('Basmati Rice',           100,          'g',       356,          0.9,  0.2,   78.0,  0.1,   1.3,   7.1,     2.0),
+    ('Sour Cream',             100,          'ml',      198,          19.4, 12.0,  4.6,   3.4,   0.0,   2.4,     45.0),
+    ('Chocolate Chips',        100,          'g',       479,          30.0, 18.0,  63.0,  51.0,  5.0,   4.2,     6.0)
+) AS v(iname, serving, uname, cal, fat, sat, carb, sugar, fiber, protein, sodium)
+JOIN ingredients i ON i.name = v.iname
+JOIN units       u ON u.name = v.uname
+ON CONFLICT (ingredient_id) DO NOTHING;
+
+
+-- ----------------------------------------------------------------------------
 -- tags
 -- Shared by both recipes (recipe_tags) and ingredients (ingredient_tags).
 -- The first block are recipe-level / meal-planning tags; the second block
