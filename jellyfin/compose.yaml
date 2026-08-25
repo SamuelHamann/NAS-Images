@@ -17,6 +17,7 @@ services:
       - 9096:8096/TCP
     networks:
       - arr_stack
+      
   radarr:
     image: lscr.io/linuxserver/radarr:latest
     container_name: radarr
@@ -32,6 +33,7 @@ services:
     restart: unless-stopped
     networks:
       - arr_stack
+
   sonarr:
     image: lscr.io/linuxserver/sonarr:latest
     container_name: sonarr
