@@ -132,6 +132,18 @@ services:
     networks:
       - arr_stack
 
+  watchstate:
+    image: ghcr.io/arabcoders/watchstate:latest
+    user: "0:0"
+    container_name: watchstate
+    restart: unless-stopped
+    ports:
+        - "7070:7070" # The port which the watchstate will listen on.
+    volumes:
+        - /volume1/docker/watchstate/config:/config:rw
+    networks:
+      - arr_stack
+
 networks:
   arr_stack:
     driver: bridge

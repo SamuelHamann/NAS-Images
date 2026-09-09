@@ -6,8 +6,9 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=Etc/UTC
+      - GROCY_DISABLE_AUTH=true
     volumes:
-      - /path/to/grocy/config:/config
+      - /volume1/docker/grocy/config:/config
     ports:
       - 9283:80
     restart: unless-stopped
