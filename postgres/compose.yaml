@@ -1,115 +1,34 @@
-name: postgres
-
 services:
-  postgres:
-    image: postgres:16.4-alpine3.20
-    container_name: postgres
-    restart: unless-stopped
-
-    security_opt:
-      - no-new-privileges:true
-
-    user: "1000:1000"
-
+  db:
+    image: postgres:18
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD:
+      POSTGRES_DB: postgres
     ports:
-      - "127.0.0.1:${POSTGRES_BIND_PORT:-5432}:5432"
-
-    networks:
-      - postgres_net
-
-    env_file:
-      - /volume1/docker/postgres/.env
-
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      POSTGRES_DB: ${POSTGRES_DB:-postgres}
-      POSTGRES_MULTIPLE_DATABASES: ${POSTGRES_MULTIPLE_DATABASES:-}
-      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
-      PGDATA: /var/lib/postgresql/data/pgdata
-
+      - "5433:5432"
     volumes:
-      - /volume1/docker/postgres/data:/var/lib/postgresql/data:rw
-      - /volume1/docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+      - /volume1/docker/postgres/data:/var/lib/postgresql/18/docker
+    shm_size: 128mb
+    networks:
+      - postgres_network
 
-    tmpfs:
-      - /tmp
-      - /run/postgresql
-
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -h 127.0.0.1
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-    mem_limit: 1g
-    cpus: 1.5
-
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "5"
-
-  # ---------------------------------------------------------------------------
-  # migrate
-  # ---------------------------------------------------------------------------
-  # One-shot service that applies every schema SQL file against the running
-  # postgres instance on every `docker compose up`, then exits.
-  # restart: "no" prevents Docker restarting it after it finishes.
-  #
-  # Every statement in the SQL files uses IF NOT EXISTS, so replaying them
-  # against an already-initialised database is safe — existing objects are
-  # silently skipped and new ones (e.g. api_keys) are created.
-  #
-  # Run migrations manually at any time without bringing the whole stack up:
-  #   docker compose run --rm migrate
-  migrate:
-    image: postgres:16.4-alpine3.20
-    restart: "no"
-
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin_ui
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD:
+    ports:
+      - "5434:80"
     depends_on:
-      postgres:
-        condition: service_healthy   # waits for pg_isready before connecting
-
-    security_opt:
-      - no-new-privileges:true
-
+      - db
     networks:
-      - postgres_net
-
-    env_file:
-      - /volume1/docker/postgres/.env
-
-    environment:
-      # PGPASSWORD is read automatically by psql, keeping the password out
-      # of the command line (where it would be visible in `ps` output).
-      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-
-    volumes:
-      # Mount initdb read-only — the migrate container only reads SQL files.
-      - /volume1/docker/postgres/initdb:/initdb:ro
-
-    # Connect as the superuser to the maintenance database.  Each SQL
-    # file's \connect meta-command switches to its target database.
-    # Files run in alphabetical order: 02-init (DDL schema) first,
-    # then 03-seed (test / bogus data).  All statements are idempotent
-    # so replaying is safe on an already-initialised cluster.
-    command:
-      - sh
-      - -c
-      - 'for f in /initdb/*.sql; do echo "[migrate] Applying $$f ..."; psql -h postgres -U "$$POSTGRES_USER" -d postgres -f "$$f" || exit 1; done'
-
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "5"
+      - postgres_network
 
 networks:
-  postgres_net:
-    name: postgres_net
-    driver: bridge
+  postgres_network:
+    name: postgres_network
