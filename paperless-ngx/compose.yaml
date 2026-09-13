@@ -15,7 +15,7 @@ services:
       - "8000:8000"
     volumes:
       - /volume1/docker/paperless/data:/usr/src/paperless/data
-      - /volume2/volume2/Paperless/Media/:/usr/src/paperless/media
+      - /volume2/volume2/Documents/Media/:/usr/src/paperless/media
       - /volume1/docker/paperless/export:/usr/src/paperless/export
       - /volume1/docker/paperless/consume:/usr/src/paperless/consume
     environment:
