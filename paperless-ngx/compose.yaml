@@ -1,0 +1,36 @@
+services:
+  broker:
+    image: docker.io/valkey/valkey:9-alpine
+    restart: unless-stopped
+    volumes:
+      - /volume1/docker/valkey/data:/data
+    networks:
+      - default
+  webserver:
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    restart: unless-stopped
+    depends_on:
+      - broker
+    ports:
+      - "8000:8000"
+    volumes:
+      - /volume1/docker/paperless/data:/usr/src/paperless/data
+      - /volume2/volume2/Paperless/Media/:/usr/src/paperless/media
+      - /volume1/docker/paperless/export:/usr/src/paperless/export
+      - /volume1/docker/paperless/consume:/usr/src/paperless/consume
+    environment:
+      PAPERLESS_REDIS: redis://broker:6379
+      PAPERLESS_DBHOST: db
+      PAPERLESS_DBENGINE: postgresql
+      PAPERLESS_TIME_ZONE: America/Montreal
+      PAPERLESS_SECRET_KEY: 
+    networks:
+      - default
+      - postgres_network
+
+networks:
+  default:
+  postgres_network:
+    external: true
+    name: postgres_network
+
