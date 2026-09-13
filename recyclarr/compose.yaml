@@ -1,0 +1,16 @@
+services:
+  recyclarr:
+    image: ghcr.io/recyclarr/recyclarr:8
+    container_name: recyclarr
+    user: 1000:1000
+    volumes:
+      - /volume1/docker/recyclarr/config:/config
+    environment:
+      - TZ=America/Montreal
+    networks:
+      - arr_stack
+
+networks:
+  arr_stack:
+    external: true
+    name: jellyfin_arr_stack
