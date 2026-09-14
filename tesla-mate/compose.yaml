@@ -1,0 +1,68 @@
+services:
+  teslamate:
+    image: teslamate/teslamate:latest
+    restart: always
+    environment:
+      - ENCRYPTION_KEY= #replace with a secure key to encrypt your Tesla API tokens
+      - DATABASE_USER=teslamate_user
+      - DATABASE_PASS=
+      - DATABASE_NAME=teslamate
+      - DATABASE_HOST=db
+      - MQTT_HOST=mosquitto
+    ports:
+      - 4000:4000
+    volumes:
+      - /volume2/volume2/Teslamate:/opt/app/import
+    cap_drop:
+      - all
+    networks:
+      - default
+      - postgres_network
+    
+
+  grafana:
+    image: teslamate/grafana:latest
+    restart: always
+    user: "0"
+    environment:
+      - DATABASE_USER=teslamate_user
+      - DATABASE_PASS=
+      - DATABASE_NAME=teslamate
+      - DATABASE_HOST=db
+    ports:
+      - 3001:3000
+    volumes:
+      - /volume1/docker/grafana:/var/lib/grafana
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: always
+    command: mosquitto -c /mosquitto-no-auth.conf
+    # ports:
+    #   - 1883:1883
+    volumes:
+      - /volume1/docker/mosquitto/conf:/mosquitto/config
+      - /volume1/docker/mosquitto/data:/mosquitto/data
+  
+  teslamateapi:
+    image: tobiasehlert/teslamateapi:latest
+    restart: always
+    environment:
+      - ENCRYPTION_KEY=
+      - DATABASE_USER=teslamate_user
+      - DATABASE_PASS=
+      - DATABASE_NAME=teslamate
+      - DATABASE_HOST=db
+      - MQTT_HOST=mosquitto
+      - TZ=America/Montreal
+    ports:
+      - 4001:8080
+    networks:
+      - default
+      - postgres_network
+
+networks:
+  default:
+  postgres_network:
+    external: true
+    name: postgres_network
