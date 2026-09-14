@@ -1,0 +1,36 @@
+services:
+  app:
+    image: nextcloud
+    restart: always
+    ports:
+      - 5000:80
+    networks:
+      - postgres_network
+      - default
+    volumes:
+      - /volume1/docker/nextcloud/html:/var/www/html
+      - /volume2/volume2/Nextcloud:/var/www/html/data
+    environment:
+      - POSTGRES_DB=nextcloud
+      - POSTGRES_USER=nextcloud_user
+      - POSTGRES_PASSWORD=
+      - POSTGRES_HOST=db
+      - REDIS_HOST=redis
+      - REDIS_HOST_PORT=6381
+  
+  redis:
+    image: redis:alpine
+    container_name: nextcloud_redis
+    restart: unless-stopped
+    command: redis-server
+      --port 6381
+    ports:
+      - "6381:6379"
+    volumes:
+      - /volume1/docker/nextcloud/redis:/data
+
+networks:
+  default:
+  postgres_network:
+    external: true
+    name: postgres_network
