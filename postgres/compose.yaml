@@ -3,6 +3,17 @@ services:
     image: ghcr.io/immich-app/postgres:18-vectorchord1.1.1
     container_name: postgres_db
     restart: always
+    # Immich's image has no PostGIS (needed by Dawarich); install it at start-up
+    # from the PGDG apt repo, then hand off to the image's normal entrypoint.
+    # (Alternative: build the Dockerfile in this folder to bake it in.)
+    entrypoint:
+      - bash
+      - -c
+      - |
+        if ! dpkg -s postgresql-18-postgis-3 >/dev/null 2>&1; then
+          apt-get update && apt-get install -y --no-install-recommends postgresql-18-postgis-3 postgresql-18-postgis-3-scripts && rm -rf /var/lib/apt/lists/*
+        fi
+        exec /usr/local/bin/immich-docker-entrypoint.sh postgres -c config_file=/etc/postgresql/postgresql.conf
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD:

@@ -1,0 +1,151 @@
+# full list of environment variables with descriptions can be found in the documentation:
+# https://dawarich.app/docs/self-hosting/environment-variables/
+
+networks:
+  default:
+  postgres_network:
+    external: true
+    name: postgres_network
+
+services:
+  dawarich_redis:
+    image: redis:7.4-alpine
+    container_name: dawarich_redis
+    command: >
+      redis-server
+      --port 6380
+      --save 900 1
+      --save 300 10
+      --appendonly no
+    volumes:
+      - /volume1/docker/dawarich/redis:/data
+    restart: always
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-p", "6380", "--raw", "incr", "ping" ]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+
+  dawarich_app:
+    image: freikin/dawarich:latest
+    container_name: dawarich_app
+    volumes:
+      - /volume1/docker/dawarich/public:/var/app/public
+      - /volume1/docker/dawarich/watched:/var/app/tmp/imports/watched
+      - /volume2/volume2/Dawarich:/var/app/storage
+      - /volume1/docker/dawarich/db_data:/dawarich_db_data
+    networks:
+      - default
+      - postgres_network
+    ports:
+      - "3000:3000"
+    stdin_open: true
+    tty: true
+    entrypoint: web-entrypoint.sh
+    command: ['bin/rails', 'server', '-p', '3000', '-b', '::']
+    restart: unless-stopped
+    environment:
+      RAILS_ENV: production
+      ### To run under a non-root user, set PUID/PGID here (do NOT use `user:`).
+      # PUID: ${PUID:-1000}
+      # PGID: ${PGID:-1000}
+      REDIS_URL: ${REDIS_URL:-redis://dawarich_redis:6380}
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_USERNAME: dawarich_user
+      DATABASE_PASSWORD: 
+      DATABASE_NAME: dawarich
+      APPLICATION_HOSTS: localhost,127.0.0.1,192.168.2.50,nas.local
+      TIME_ZONE: America/Montreal
+      APPLICATION_PROTOCOL: http
+      PROMETHEUS_EXPORTER_ENABLED: false
+      SECRET_KEY_BASE: 
+      RAILS_LOG_TO_STDOUT: true
+      SELF_HOSTED: true
+      STORE_GEODATA: true
+      # One preloaded Puma worker is plenty for a household instance and
+      # halves idle memory. Raise for busier instances.
+      WEB_CONCURRENCY: 1
+      ### OTP encryption keys are required if you want to use 2FA
+      # OTP_ENCRYPTION_PRIMARY_KEY: ${OTP_ENCRYPTION_PRIMARY_KEY:-}
+      # OTP_ENCRYPTION_DETERMINISTIC_KEY: ${OTP_ENCRYPTION_DETERMINISTIC_KEY:-}
+      # OTP_ENCRYPTION_KEY_DERIVATION_SALT: ${OTP_ENCRYPTION_KEY_DERIVATION_SALT:-}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: 100m
+        max-file: 5
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO - http://127.0.0.1:3000/api/v1/health | grep -q '\"status\"\\s*:\\s*\"ok\"'" ]
+      interval: 10s
+      retries: 30
+      start_period: 30s
+      timeout: 10s
+    depends_on:
+      dawarich_redis:
+        condition: service_healthy
+        restart: true
+    deploy:
+      resources:
+        limits:
+          cpus: 0.5
+          memory: 2G
+
+  dawarich_sidekiq:
+    image: freikin/dawarich:latest
+    container_name: dawarich_sidekiq
+    volumes:
+      - /volume1/docker/dawarich/public:/var/app/public
+      - /volume1/docker/dawarich/watched:/var/app/tmp/imports/watched
+      - /volume2/volume2/Dawarich:/var/app/storage
+    networks:
+      - postgres_network
+      - default
+    stdin_open: true
+    tty: true
+    entrypoint: sidekiq-entrypoint.sh
+    command: ['sidekiq']
+    restart: unless-stopped
+    environment:
+      RAILS_ENV: production
+      ### To run under a non-root user, set PUID/PGID here (do NOT use `user:`).
+      # PUID: ${PUID:-1000}
+      # PGID: ${PGID:-1000}
+      REDIS_URL: redis://dawarich_redis:6380
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_USERNAME: dawarich_user
+      DATABASE_PASSWORD: 
+      DATABASE_NAME: dawarich
+      APPLICATION_HOSTS: localhost,127.0.0.1,192.168.2.50,nas.local
+      # 3 job threads keep idle memory and DB connections low; raise
+      # temporarily for large imports.
+      BACKGROUND_PROCESSING_CONCURRENCY: 3
+      APPLICATION_PROTOCOL: http
+      PROMETHEUS_EXPORTER_ENABLED: false
+      SECRET_KEY_BASE: 
+      SELF_HOSTED: true
+      STORE_GEODATA: true
+      ### OTP encryption keys are required if you want to use 2FA
+      # OTP_ENCRYPTION_PRIMARY_KEY: ${OTP_ENCRYPTION_PRIMARY_KEY:-}
+      # OTP_ENCRYPTION_DETERMINISTIC_KEY: ${OTP_ENCRYPTION_DETERMINISTIC_KEY:-}
+      # OTP_ENCRYPTION_KEY_DERIVATION_SALT: ${OTP_ENCRYPTION_KEY_DERIVATION_SALT:-}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: 100m
+        max-file: 5
+    healthcheck:
+      test: [ "CMD-SHELL", "pgrep -f sidekiq" ]
+      interval: 10s
+      retries: 30
+      start_period: 30s
+      timeout: 10s
+    depends_on:
+      dawarich_redis:
+        condition: service_healthy
+        restart: true
+      dawarich_app:
+        condition: service_healthy
+        restart: true
