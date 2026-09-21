@@ -9,7 +9,7 @@ services:
       - default
     volumes:
       - /volume1/docker/nextcloud/html:/var/www/html
-      - /volume2/volume2/Nextcloud:/var/www/html/data
+      - /volume2/volume2/Nextcloud/data:/var/www/html/data
     environment:
       - POSTGRES_DB=nextcloud
       - POSTGRES_USER=nextcloud_user
