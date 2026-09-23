@@ -33,6 +33,9 @@ services:
       - 3001:3000
     volumes:
       - /volume1/docker/grafana:/var/lib/grafana
+    networks:
+      - default
+      - postgres_network
 
   mosquitto:
     image: eclipse-mosquitto:2
